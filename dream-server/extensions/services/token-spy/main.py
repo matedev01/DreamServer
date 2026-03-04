@@ -12,11 +12,14 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
+from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, Security
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 # Database backend selection: sqlite (default) or postgres
 DB_BACKEND = os.environ.get("DB_BACKEND", "sqlite").lower()
@@ -219,6 +222,41 @@ logging.basicConfig(
     format=f"%(asctime)s [{AGENT_NAME}] %(levelname)s %(message)s",
 )
 log = logging.getLogger("token-monitor")
+
+# ── Authentication ───────────────────────────────────────────────────────────
+
+TOKEN_SPY_API_KEY = os.environ.get("TOKEN_SPY_API_KEY", "")
+if not TOKEN_SPY_API_KEY:
+    _key_file = Path("/data/token-spy-api-key.txt")
+    try:
+        TOKEN_SPY_API_KEY = _key_file.read_text().strip()
+    except FileNotFoundError:
+        TOKEN_SPY_API_KEY = secrets.token_urlsafe(32)
+        _key_file.parent.mkdir(parents=True, exist_ok=True)
+        _key_file.write_text(TOKEN_SPY_API_KEY)
+        _key_file.chmod(0o600)
+        log.warning(
+            "TOKEN_SPY_API_KEY not set. Generated key and wrote to %s (mode 0600).",
+            _key_file,
+        )
+
+_security_scheme = HTTPBearer(auto_error=False)
+
+
+async def verify_api_key(
+    credentials: HTTPAuthorizationCredentials = Security(_security_scheme),
+):
+    """Verify API key for protected endpoints."""
+    if not credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required. Provide Bearer token in Authorization header.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not secrets.compare_digest(credentials.credentials, TOKEN_SPY_API_KEY):
+        raise HTTPException(status_code=403, detail="Invalid API key.")
+    return credentials.credentials
+
 
 # ── App ──────────────────────────────────────────────────────────────────────
 
@@ -496,7 +534,7 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int,
 
 # ── Proxy Endpoint ───────────────────────────────────────────────────────────
 
-@app.post("/v1/messages")
+@app.post("/v1/messages", dependencies=[Depends(verify_api_key)])
 async def proxy_messages(request: Request):
     """Transparent proxy for Anthropic /v1/messages with metrics capture."""
     start = time.time()
@@ -714,7 +752,7 @@ def _analyze_openai_messages(messages: list) -> dict:
     }
 
 
-@app.post("/v1/chat/completions")
+@app.post("/v1/chat/completions", dependencies=[Depends(verify_api_key)])
 async def proxy_chat_completions(request: Request):
     """Transparent proxy for OpenAI-compatible /v1/chat/completions (Moonshot/Kimi)."""
     start = time.time()
@@ -1386,7 +1424,7 @@ def health():
 # ── API Endpoints ────────────────────────────────────────────────────────────
 
 
-@app.get("/api/filter-stats")
+@app.get("/api/filter-stats", dependencies=[Depends(verify_api_key)])
 def api_filter_stats():
     """Current filter configuration and summary."""
     f_settings = get_filter_settings(AGENT_NAME)
@@ -1417,7 +1455,7 @@ def api_filter_stats():
     }
 
 
-@app.get("/api/settings")
+@app.get("/api/settings", dependencies=[Depends(verify_api_key)])
 def api_get_settings():
     """Current settings. Per-agent values of null inherit the global default."""
     settings = load_settings()
@@ -1427,7 +1465,7 @@ def api_get_settings():
     return settings
 
 
-@app.post("/api/settings")
+@app.post("/api/settings", dependencies=[Depends(verify_api_key)])
 async def api_update_settings(request: Request):
     """Update settings. Accepts partial updates (only provided keys are changed).
 
@@ -1511,18 +1549,18 @@ def _update_timer_interval(minutes: int):
     except Exception as e:
         log.warning(f"[SETTINGS] Could not update timer: {e} (may need sudo)")
 
-@app.get("/api/usage")
+@app.get("/api/usage", dependencies=[Depends(verify_api_key)])
 def api_usage(agent: str | None = None, hours: int = 24, limit: int = 200):
     return query_usage(agent=agent, hours=hours, limit=limit)
 
 
-@app.get("/token-usage")
+@app.get("/token-usage", dependencies=[Depends(verify_api_key)])
 def token_usage_alias(agent: str | None = None, hours: int = 24, limit: int = 200):
     """Alias for /api/usage — returns recent token usage events."""
     return query_usage(agent=agent, hours=hours, limit=limit)
 
 
-@app.get("/api/summary")
+@app.get("/api/summary", dependencies=[Depends(verify_api_key)])
 def api_summary(hours: int = 24):
     try:
         result = query_summary(hours=hours) if _db_available else []
@@ -1558,7 +1596,7 @@ def api_summary(hours: int = 24):
     return result
 
 
-@app.get("/api/session-status")
+@app.get("/api/session-status", dependencies=[Depends(verify_api_key)])
 def api_session_status(agent: str | None = None):
     """Current session health and cost recommendation for an agent."""
     target = agent or AGENT_NAME
@@ -1588,7 +1626,7 @@ def api_session_status(agent: str | None = None):
     return result
 
 
-@app.post("/api/reset-session")
+@app.post("/api/reset-session", dependencies=[Depends(verify_api_key)])
 def api_reset_session(agent: str):
     """Kill the largest active session for an agent (safety valve trigger)."""
     if not AGENT_SESSION_DIRS.get(agent) and agent not in REMOTE_AGENTS:
@@ -1774,15 +1812,15 @@ function getHours() {
 async function loadAll() {
   const hours = getHours();
   const [summaryRes, usageRes] = await Promise.all([
-    fetch('/api/summary?hours=' + hours),
-    fetch('/api/usage?hours=' + hours + '&limit=500'),
+    fetch('/api/summary?hours=' + hours, {headers: _authHdr}),
+    fetch('/api/usage?hours=' + hours + '&limit=500', {headers: _authHdr}),
   ]);
   const summary = await summaryRes.json();
   const usage = await usageRes.json();
   // Dynamically discover agents from data (usage + summary)
   const agents = [...new Set([...usage.map(u => u.agent), ...summary.map(s => s.agent)])];
   // Fetch session status for each discovered agent
-  const sessionPromises = agents.map(agent => fetch('/api/session-status?agent=' + encodeURIComponent(agent)));
+  const sessionPromises = agents.map(agent => fetch('/api/session-status?agent=' + encodeURIComponent(agent), {headers: _authHdr}));
   const sessionResults = await Promise.all(sessionPromises);
   const sessions = await Promise.all(sessionResults.map(r => r.json()));
   window._agents = agents;
@@ -1827,7 +1865,7 @@ async function resetSession(agent) {
   const btn = document.getElementById('reset-' + agent);
   if (btn) { btn.disabled = true; btn.textContent = 'Resetting...'; }
   try {
-    const res = await fetch('/api/reset-session?agent=' + encodeURIComponent(agent), { method: 'POST' });
+    const res = await fetch('/api/reset-session?agent=' + encodeURIComponent(agent), { method: 'POST', headers: _authHdr });
     const data = await res.json();
     if (data.action === 'killed') {
       if (btn) { btn.textContent = 'Reset — restarting...'; }
@@ -2123,7 +2161,7 @@ function toggleSettings() {
 
 async function loadSettingsUI() {
   try {
-    const res = await fetch('/api/settings');
+    const res = await fetch('/api/settings', {headers: _authHdr});
     const s = await res.json();
     document.getElementById('set-global-limit').value = s.session_char_limit || '';
     document.getElementById('set-global-poll').value = s.poll_interval_minutes || '';
@@ -2201,7 +2239,7 @@ async function saveSettings() {
   try {
     const res = await fetch('/api/settings', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', ..._authHdr},
       body: JSON.stringify(body),
     });
     if (res.ok) {
@@ -2237,12 +2275,14 @@ setInterval(loadAll, 30000);
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
-    return DASHBOARD_HTML
+    # Inject API key into dashboard so embedded JS can authenticate
+    auth_script = f'<script>const _TSK="{TOKEN_SPY_API_KEY}";const _authHdr={{"Authorization":"Bearer "+_TSK}};</script>'
+    return DASHBOARD_HTML.replace("<head>", "<head>" + auth_script, 1)
 
 
 # ── SSE Token Events Stream ─────────────────────────────────────────────────
 
-@app.get("/token_events")
+@app.get("/token_events", dependencies=[Depends(verify_api_key)])
 async def token_events(request: Request):
     """Stream token usage events as Server-Sent Events."""
     async def event_stream():
