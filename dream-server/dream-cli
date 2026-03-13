@@ -426,6 +426,17 @@ cmd_config() {
                 warn "validate-env.sh not found at $INSTALL_DIR/scripts/validate-env.sh"
                 warn "Make sure you're on a recent Dream Server release."
             fi
+            echo ""
+            if [[ -x "$INSTALL_DIR/scripts/validate-manifests.sh" ]]; then
+                log "Validating extension manifests and compatibility..."
+                if "$INSTALL_DIR/scripts/validate-manifests.sh"; then
+                    success "Extension manifests validated"
+                else
+                    warn "Extension manifest validation reported issues. See output above."
+                fi
+            else
+                warn "validate-manifests.sh not found at $INSTALL_DIR/scripts/validate-manifests.sh"
+            fi
             ;;
         *)
             log "Usage: dream config [show|edit|validate]"
@@ -1220,7 +1231,7 @@ ${CYAN}Examples:${NC}
   dream restart stt               # Restart Whisper (via alias)
   dream chat "What is 2+2?"      # Quick LLM test
   dream config edit               # Edit .env file
-  dream config validate           # Validate .env against schema
+  dream config validate           # Validate .env and extension manifests
 
 ${CYAN}Environment:${NC}
   DREAM_HOME          Installation directory (default: ~/dream-server)

@@ -132,6 +132,11 @@ dream list                 # Shows all services with status
 Required root field:
 - `schema_version: dream.services.v1`
 
+Optional root field:
+- `compatibility` — version compatibility hints:
+  - `dream_min`: minimum Dream Server version this extension supports (e.g. `"2.0.0"`)
+  - `dream_max`: maximum Dream Server version this extension was tested against (optional)
+
 Service section:
 - required: `id`, `name`, `port`, `health`
 - recommended: `aliases`, `container_name`, `compose_file`, `category`, `depends_on`
