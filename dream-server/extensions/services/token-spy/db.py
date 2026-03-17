@@ -68,12 +68,18 @@ def init_db():
     conn.commit()
 
     # Add filter metric columns (idempotent — safe on existing databases)
-    for col, typedef in [
-        ("filter_chars_saved", "INTEGER DEFAULT 0"),
-        ("filter_tokens_saved", "INTEGER DEFAULT 0"),
-        ("filter_tools_removed", "INTEGER DEFAULT 0"),
-    ]:
+    # Allowlist for security: only these columns can be added
+    ALLOWED_COLUMNS = {
+        "filter_chars_saved": "INTEGER DEFAULT 0",
+        "filter_tokens_saved": "INTEGER DEFAULT 0",
+        "filter_tools_removed": "INTEGER DEFAULT 0",
+    }
+
+    for col, typedef in ALLOWED_COLUMNS.items():
         try:
+            # Validate column name and type against allowlist before executing
+            if col not in ALLOWED_COLUMNS or typedef != ALLOWED_COLUMNS[col]:
+                raise ValueError(f"Invalid column definition: {col} {typedef}")
             conn.execute(f"ALTER TABLE usage ADD COLUMN {col} {typedef}")
             conn.commit()
         except sqlite3.OperationalError as e:
