@@ -12,7 +12,7 @@ services:
     volumes:
       - ./data/invokeai:/invokeai:rw
     ports:
-      - "${INVOKEAI_PORT:-9090}:9090"
+      - "127.0.0.1:${INVOKEAI_PORT:-9090}:9090"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/health"]
       interval: 30s

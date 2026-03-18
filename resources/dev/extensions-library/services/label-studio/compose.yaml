@@ -17,7 +17,7 @@ services:
       - ./media:/label-studio/media:rw
       - ./www:/label-studio/www:rw
     ports:
-      - "${LABEL_STUDIO_PORT:-8085}:8080"
+      - "127.0.0.1:${LABEL_STUDIO_PORT:-8085}:8080"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
       interval: 30s

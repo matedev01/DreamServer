@@ -9,7 +9,7 @@ services:
       - no-new-privileges:true
     shm_size: "128mb"
     ports:
-      - "${FRIGATE_PORT:-8971}:5000"
+      - "127.0.0.1:${FRIGATE_PORT:-8971}:5000"
       - "${FRIGATE_RTSP_PORT:-8554}:8554"
       - "${FRIGATE_WEBRTC_PORT:-8555}:8555/tcp"
       - "${FRIGATE_WEBRTC_PORT:-8555}:8555/udp"

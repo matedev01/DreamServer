@@ -29,8 +29,8 @@ services:
     volumes:
       - ./data/gitea:/var/lib/gitea:rw
     ports:
-      - "${GITEA_PORT:-7830}:3000"
-      - "${GITEA_SSH_PORT:-2222}:2222"
+      - "127.0.0.1:${GITEA_PORT:-7830}:3000"
+      - "127.0.0.1:${GITEA_SSH_PORT:-2222}:2222"
     healthcheck:
       test: ["CMD", "/usr/local/bin/gitea", "healthcheck"]
       interval: 30s

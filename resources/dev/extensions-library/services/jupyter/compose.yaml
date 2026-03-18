@@ -5,7 +5,7 @@ services:
     image: jupyter/scipy-notebook:python-3.11
     container_name: jupyter
     ports:
-      - "${JUPYTER_PORT:-8888}:8888"
+      - "127.0.0.1:${JUPYTER_PORT:-8888}:8888"
     volumes:
       - ./data/jupyter/workspace:/home/jovyan/work
       - ./data/jupyter/notebooks:/home/jovyan/notebooks

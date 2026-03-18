@@ -11,7 +11,7 @@ services:
     volumes:
       - ./data/fooocus:/app/outputs:rw
     ports:
-      - "${FOOOCUS_PORT:-7865}:7865"
+      - "127.0.0.1:${FOOOCUS_PORT:-7865}:7865"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:7865/"]
       interval: 30s

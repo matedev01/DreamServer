@@ -5,7 +5,7 @@ services:
     image: aladdin1234/rvc-webui:0.1@sha256:0127333111eccb00ee97e12052f2c9efc7739d74841dbdec771d4f469273a0c2
     container_name: rvc
     ports:
-      - "${RVC_PORT:-7809}:7865"
+      - "127.0.0.1:${RVC_PORT:-7809}:7865"
     volumes:
       - ./data/rvc/weights:/app/assets/weights
       - ./data/rvc/opt:/app/opt
