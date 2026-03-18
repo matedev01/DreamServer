@@ -1,0 +1,11 @@
+services:
+  text-generation-webui:
+    image: atinoda/text-generation-webui:default-rocm-v4.0@sha256:686c42a9b964625d8b9c47ca9d9162314993a7f8b41109367fd7a94c7377f0b1
+    devices:
+      - /dev/dri:/dev/dri
+      - /dev/kfd:/dev/kfd
+    group_add:
+      - "${VIDEO_GID:-44}"
+      - "${RENDER_GID:-992}"
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-}
