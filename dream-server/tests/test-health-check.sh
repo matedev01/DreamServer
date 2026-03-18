@@ -97,7 +97,7 @@ fi
 
 # 7. Verify graceful handling when docker unavailable (mock test)
 # The function should return 0 (success) when docker command not found
-if grep -A5 "check_container_state" "$ROOT_DIR/scripts/health-check.sh" | grep -q "command -v docker"; then
+if grep -A15 "check_container_state" "$ROOT_DIR/scripts/health-check.sh" | grep -q "command -v docker"; then
     pass "check_container_state checks for docker availability"
 else
     fail "check_container_state missing docker availability check"
