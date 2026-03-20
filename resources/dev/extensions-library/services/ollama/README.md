@@ -16,7 +16,7 @@ Ollama is a simple way to run open-source LLMs locally. This extension provides 
 ### Enable the extension
 
 ```bash
-dream extensions enable ollama
+dream enable ollama
 ```
 
 ### Load a different model
@@ -50,7 +50,7 @@ Ollama works with:
 ## Uninstall
 
 ```bash
-dream extensions disable ollama
+dream disable ollama
 ```
 
 This removes the container and stops the service. Your downloaded models in `./data/ollama/` are preserved.

@@ -17,7 +17,7 @@ Piper is a fast, local neural text-to-speech system that sounds great and is opt
 ### Enable the extension
 
 ```bash
-dream extensions enable piper-audio
+dream enable piper-audio
 ```
 
 ### Wyoming Protocol Endpoint
@@ -62,7 +62,7 @@ Piper integrates with:
 ## Uninstall
 
 ```bash
-dream extensions disable piper-audio
+dream disable piper-audio
 ```
 
 Voice models in `./data/piper/` are preserved.

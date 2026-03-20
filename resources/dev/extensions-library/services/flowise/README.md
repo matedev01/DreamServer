@@ -46,7 +46,7 @@ FLOWISE_PASSWORD=your-secure-password
 
 ```bash
 # Enable the extension
-dream extensions enable flowise
+dream enable flowise
 
 # Start the service
 docker compose up -d flowise
@@ -56,7 +56,7 @@ docker compose up -d flowise
 
 ## Quick Start
 
-1. **Enable**: `dream extensions enable flowise`
+1. **Enable**: `dream enable flowise`
 2. **Open**: Visit http://localhost:3002
 3. **Create Chatflow**: Click "Add New" → "Chatflow"
 4. **Add Nodes**: Drag LLM, memory, and tool nodes

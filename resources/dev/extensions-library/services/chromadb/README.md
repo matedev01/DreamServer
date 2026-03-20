@@ -17,7 +17,7 @@ ChromaDB is an AI-native open-source vector database designed for building embed
 ### Enable the extension
 
 ```bash
-dream extensions enable chromadb
+dream enable chromadb
 ```
 
 ### Access the API
@@ -62,7 +62,7 @@ curl -X POST http://localhost:8000/api/v1/collections/my_collection/add \
 ## Uninstall
 
 ```bash
-dream extensions disable chromadb
+dream disable chromadb
 ```
 
 This removes the container. Your data in `./data/chromadb/` is preserved.

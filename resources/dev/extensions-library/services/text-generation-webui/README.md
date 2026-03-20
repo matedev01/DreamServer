@@ -14,7 +14,7 @@ The most feature-complete local LLM inference UI. Supports GGUF, GPTQ, AWQ, EXL2
 ## Quick Start
 
 ```bash
-dream extensions enable text-generation-webui
+dream enable text-generation-webui
 ```
 
 Then open **http://localhost:7862** and load a model via the Model tab.

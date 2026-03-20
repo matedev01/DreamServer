@@ -50,7 +50,7 @@ Set any of these to enable the corresponding provider:
 
 ```bash
 # Enable the extension
-dream extensions enable librechat
+dream enable librechat
 
 # Start the services
 docker compose up -d librechat

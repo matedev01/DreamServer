@@ -25,7 +25,7 @@ SillyTavern is a character-based roleplay chat interface. Unlike API-first servi
 
 SillyTavern is accessed directly via web browser:
 
-1. Enable the extension: `dream extensions enable sillytavern`
+1. Enable the extension: `dream enable sillytavern`
 2. Access at: `http://localhost:8001` (or your configured port)
 3. Configure your AI backend in the SillyTavern UI
 4. Create or import character cards

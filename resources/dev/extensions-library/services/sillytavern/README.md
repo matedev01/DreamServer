@@ -16,7 +16,7 @@ SillyTavern is a character/roleplay chat UI that connects to local LLMs. This ex
 ### Enable the extension
 
 ```bash
-dream extensions enable sillytavern
+dream enable sillytavern
 ```
 
 ### Access the UI
@@ -48,7 +48,7 @@ SillyTavern works with:
 ## Uninstall
 
 ```bash
-dream extensions disable sillytavern
+dream disable sillytavern
 ```
 
 Character files in `./data/sillytavern/` are preserved.

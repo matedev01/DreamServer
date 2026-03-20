@@ -49,7 +49,7 @@ Set `ANYTHINGLLM_LLM_PROVIDER` to one of:
 
 ```bash
 # Enable the extension
-dream extensions enable anythingllm
+dream enable anythingllm
 
 # Start the service
 docker compose up -d anythingllm
@@ -60,7 +60,7 @@ docker compose up -d anythingllm
 
 ## Setup Steps
 
-1. **Enable**: `dream extensions enable anythingllm`
+1. **Enable**: `dream enable anythingllm`
 2. **Start**: `docker compose up -d anythingllm`
 3. **Open**: Visit http://localhost:3001
 4. **Create workspace**: Click "New Workspace"

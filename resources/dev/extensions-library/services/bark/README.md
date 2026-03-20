@@ -13,7 +13,7 @@ Suno AI's transformer-based text-to-audio model. Generates highly expressive, re
 ## Quick Start
 
 ```bash
-dream extensions enable bark
+dream enable bark
 ```
 
 **Note:** First startup downloads ~5GB of models. This can take 10-20 minutes depending on your connection. Subsequent starts are instant.

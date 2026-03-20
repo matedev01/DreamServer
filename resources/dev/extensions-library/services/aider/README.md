@@ -18,7 +18,7 @@ Aider is AI pair programming in your terminal. It allows you to edit code in you
 ### Enable the extension
 
 ```bash
-dream extensions enable aider
+dream enable aider
 ```
 
 ### Run Aider
@@ -69,7 +69,7 @@ Aider works with:
 ## Uninstall
 
 ```bash
-dream extensions disable aider
+dream disable aider
 ```
 
 Your projects in `./data/aider/` are preserved.

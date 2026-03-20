@@ -29,7 +29,7 @@ Fooocus uses sensible defaults. No manual configuration needed.
 
 ## Usage
 
-1. Enable the extension: `dream extensions enable fooocus`
+1. Enable the extension: `dream enable fooocus`
 2. Access the UI at `http://localhost:7865`
 3. Start generating images with natural language prompts
 
@@ -39,6 +39,6 @@ Fooocus runs as a standalone image generation service. It does not connect to Dr
 
 ## Uninstall
 
-Disable the extension: `dream extensions disable fooocus`
+Disable the extension: `dream disable fooocus`
 
 This will remove the container but preserve your generated images in `./data/fooocus/`.
