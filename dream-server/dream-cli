@@ -2508,6 +2508,7 @@ cmd_gpu() {
             echo "Options for reassign:"
             echo "  --auto       Run automatic assignment without interactive prompts"
             echo "  --dry-run    Show proposed assignment without writing .env"
+            echo "  --manual     Manually specify GPU assignment interactively"
             ;;
         *)  error "Unknown gpu subcommand: '${subcommand}'. Run 'dream gpu help'" ;;
     esac
