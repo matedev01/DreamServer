@@ -37,12 +37,12 @@ setup() {
     assert_equal "$MAX_CONTEXT" "32768"
 }
 
-@test "resolve_tier_config: tier 3 sets Pro with qwen3.5-27b" {
+@test "resolve_tier_config: tier 3 sets Pro with qwen3-30b-a3b" {
     TIER=3
     resolve_tier_config
     assert_equal "$TIER_NAME" "Pro"
-    assert_equal "$LLM_MODEL" "qwen3.5-27b"
-    assert_equal "$GGUF_FILE" "Qwen3.5-27B-Q4_K_M.gguf"
+    assert_equal "$LLM_MODEL" "qwen3-30b-a3b"
+    assert_equal "$GGUF_FILE" "Qwen3-30B-A3B-Q4_K_M.gguf"
     assert_equal "$MAX_CONTEXT" "32768"
 }
 
@@ -107,7 +107,7 @@ setup() {
     assert_output "qwen3.5-9b"
 
     run tier_to_model 3
-    assert_output "qwen3.5-27b"
+    assert_output "qwen3-30b-a3b"
 
     run tier_to_model 4
     assert_output "qwen3-30b-a3b"
@@ -121,7 +121,7 @@ setup() {
     assert_output "qwen3.5-9b"
 
     run tier_to_model T3
-    assert_output "qwen3.5-27b"
+    assert_output "qwen3-30b-a3b"
 
     run tier_to_model T4
     assert_output "qwen3-30b-a3b"

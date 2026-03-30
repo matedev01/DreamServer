@@ -39,9 +39,9 @@ resolve_tier_config() {
             ;;
         3)
             TIER_NAME="Pro"
-            LLM_MODEL="qwen3.5-27b"
-            GGUF_FILE="Qwen3.5-27B-Q4_K_M.gguf"
-            GGUF_URL="https://huggingface.co/unsloth/Qwen3.5-27B-GGUF/resolve/main/Qwen3.5-27B-Q4_K_M.gguf"
+            LLM_MODEL="qwen3-30b-a3b"
+            GGUF_FILE="Qwen3-30B-A3B-Q4_K_M.gguf"
+            GGUF_URL="https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf"
             GGUF_SHA256="84b5f7f112156d63836a01a69dc3f11a6ba63b10a23b8ca7a7efaf52d5a2d806"
             MAX_CONTEXT=32768
             ;;

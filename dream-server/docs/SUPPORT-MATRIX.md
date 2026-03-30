@@ -38,7 +38,7 @@ Last updated: 2026-03-17
 | `SH_LARGE` | AMD Strix Halo 90+ | Qwen3-Coder-Next | ≥ 90 GB (unified) | ROCm |
 | `SH_COMPACT` | AMD Strix Halo < 90 GB | Qwen3 30B A3B | < 90 GB (unified) | ROCm |
 | `4` | NVIDIA 40 GB+ / multi-GPU | Qwen3 30B A3B | ≥ 40 GB | CUDA |
-| `3` | NVIDIA 20 GB+ | Qwen3.5 27B | ≥ 20 GB | CUDA |
+| `3` | NVIDIA 20 GB+ | Qwen3 30B-A3B | ≥ 20 GB | CUDA |
 | `ARC` | **Intel Arc ≥ 12 GB** (A770, B580) | Qwen3.5 9B | ≥ 12 GB | **SYCL** |
 | `2` | NVIDIA 12 GB+ | Qwen3.5 9B | ≥ 12 GB | CUDA |
 | `ARC_LITE` | **Intel Arc < 12 GB** (A750, A380) | Qwen3.5 4B | 6–11 GB | **SYCL** |

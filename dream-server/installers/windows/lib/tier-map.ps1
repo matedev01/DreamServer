@@ -88,9 +88,9 @@ function Resolve-TierConfig {
         "3" {
             return @{
                 TierName   = "Pro"
-                LlmModel   = "qwen3.5-27b"
-                GgufFile   = "Qwen3.5-27B-Q4_K_M.gguf"
-                GgufUrl    = "https://huggingface.co/unsloth/Qwen3.5-27B-GGUF/resolve/main/Qwen3.5-27B-Q4_K_M.gguf"
+                LlmModel   = "qwen3-30b-a3b"
+                GgufFile   = "Qwen3-30B-A3B-Q4_K_M.gguf"
+                GgufUrl    = "https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf"
                 GgufSha256 = "84b5f7f112156d63836a01a69dc3f11a6ba63b10a23b8ca7a7efaf52d5a2d806"
                 MaxContext = 32768
             }
@@ -159,7 +159,7 @@ function ConvertTo-ModelFromTier {
         "^(0|T0)$"               { return "qwen3.5-2b" }
         "^(1|T1)$"               { return "qwen3.5-9b" }
         "^(2|T2)$"               { return "qwen3.5-9b" }
-        "^(3|T3)$"               { return "qwen3.5-27b" }
+        "^(3|T3)$"               { return "qwen3-30b-a3b" }
         "^(4|T4)$"               { return "qwen3-30b-a3b" }
         default                  { return "" }
     }

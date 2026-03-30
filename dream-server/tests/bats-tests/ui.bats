@@ -197,24 +197,24 @@ setup() {
 # ── show_tier_recommendation ───────────────────────────────────────────────
 
 @test "show_tier_recommendation: outputs tier number" {
-    run show_tier_recommendation 3 "qwen3.5-27b" "30" "3"
+    run show_tier_recommendation 3 "qwen3-30b-a3b" "30" "3"
     assert_success
     assert_output --partial "TIER 3"
 }
 
 @test "show_tier_recommendation: outputs model name" {
-    run show_tier_recommendation 3 "qwen3.5-27b" "30" "3"
-    assert_output --partial "qwen3.5-27b"
+    run show_tier_recommendation 3 "qwen3-30b-a3b" "30" "3"
+    assert_output --partial "qwen3-30b-a3b"
 }
 
 @test "show_tier_recommendation: outputs speed" {
-    run show_tier_recommendation 3 "qwen3.5-27b" "30" "3"
+    run show_tier_recommendation 3 "qwen3-30b-a3b" "30" "3"
     assert_output --partial "30"
     assert_output --partial "tokens/second"
 }
 
 @test "show_tier_recommendation: outputs concurrent users" {
-    run show_tier_recommendation 3 "qwen3.5-27b" "30" "3"
+    run show_tier_recommendation 3 "qwen3-30b-a3b" "30" "3"
     assert_output --partial "3"
     assert_output --partial "concurrent"
 }

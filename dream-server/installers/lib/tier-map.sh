@@ -107,12 +107,12 @@ resolve_tier_config() {
             ;;
         3)
             TIER_NAME="Pro"
-            LLM_MODEL="qwen3.5-27b"
-            GGUF_FILE="Qwen3.5-27B-Q4_K_M.gguf"
-            GGUF_URL="https://huggingface.co/unsloth/Qwen3.5-27B-GGUF/resolve/main/Qwen3.5-27B-Q4_K_M.gguf"
-            GGUF_SHA256="84b5f7f112156d63836a01a69dc3f11a6ba63b10a23b8ca7a7efaf52d5a2d806"
+            LLM_MODEL="qwen3-30b-a3b"
+            GGUF_FILE="Qwen3-30B-A3B-Q4_K_M.gguf"
+            GGUF_URL="https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf"
+            GGUF_SHA256="9f1a24700a339b09c06009b729b5c809e0b64c213b8af5b711b3dbdfd0c5ba48"
             MAX_CONTEXT=32768
-            LLM_MODEL_SIZE_MB=16400   # Qwen3.5-27B-Q4_K_M (16.7 GB)
+            LLM_MODEL_SIZE_MB=18600   # Qwen3-30B-A3B-Q4_K_M MoE (18.6 GB)
             ;;
         4)
             TIER_NAME="Enterprise"
@@ -143,7 +143,7 @@ tier_to_model() {
         0|T0)           echo "qwen3.5-2b" ;;
         1|T1)           echo "qwen3.5-9b" ;;
         2|T2)           echo "qwen3.5-9b" ;;
-        3|T3)           echo "qwen3.5-27b" ;;
+        3|T3)           echo "qwen3-30b-a3b" ;;
         4|T4)           echo "qwen3-30b-a3b" ;;
         *)              echo "" ;;
     esac

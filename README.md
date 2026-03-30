@@ -169,7 +169,7 @@ The installer detects your GPU and picks the optimal model automatically. No man
 | < 8 GB | Qwen3.5 2B (Q4_K_M) | Any GPU or CPU-only |
 | 8–11 GB | Qwen3.5 9B (Q4_K_M) | RTX 4060 Ti, RTX 3060 12GB |
 | 12–20 GB | Qwen3.5 9B (Q4_K_M) | RTX 3090, RTX 4080 |
-| 20–40 GB | Qwen3.5 27B (Q4_K_M) | RTX 4090, A6000 |
+| 20–40 GB | Qwen3 30B-A3B MoE (Q4_K_M) | RTX 4090, A6000 |
 | 40+ GB | Qwen3 30B-A3B (MoE, Q4_K_M) | A100, multi-GPU |
 | 90+ GB | Qwen3 Coder Next (80B MoE, Q4_K_M) | Multi-GPU A100/H100 |
 

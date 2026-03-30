@@ -27,7 +27,7 @@ setup() {
 
     # Set defaults for all expected variables
     export TIER=3
-    export GGUF_FILE="Qwen3.5-27B-Q4_K_M.gguf"
+    export GGUF_FILE="Qwen3-30B-A3B-Q4_K_M.gguf"
     export INSTALL_DIR="$BATS_TEST_TMPDIR/dream-server"
     export NO_BOOTSTRAP="false"
     export OFFLINE_MODE="false"
