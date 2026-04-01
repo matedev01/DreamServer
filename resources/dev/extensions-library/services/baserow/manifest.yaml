@@ -23,7 +23,7 @@ service:
     
   tags:
     - database
-    - nocde
+    - nocode
     - airtable
     - spreadsheet
     - collaboration
