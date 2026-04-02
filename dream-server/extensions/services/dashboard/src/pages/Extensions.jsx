@@ -263,6 +263,7 @@ export default function Extensions() {
             <ExtensionCard
               key={ext.id}
               ext={ext}
+              gpuBackend={catalog?.gpu_backend}
               onDetails={() => setExpanded(ext.id)}
               onConsole={() => setConsoleExt(ext)}
               onAction={requestAction}
@@ -274,7 +275,7 @@ export default function Extensions() {
 
       {/* Detail modal */}
       {expanded && (
-        <DetailModal ext={extensions.find(e => e.id === expanded)} onClose={() => setExpanded(null)} />
+        <DetailModal ext={extensions.find(e => e.id === expanded)} gpuBackend={catalog?.gpu_backend} onClose={() => setExpanded(null)} />
       )}
 
       {/* Console modal */}
@@ -333,7 +334,7 @@ function SummaryItem({ label, value, color }) {
   )
 }
 
-function ExtensionCard({ ext, onDetails, onConsole, onAction, mutating }) {
+function ExtensionCard({ ext, gpuBackend, onDetails, onConsole, onAction, mutating }) {
   const iconName = ext.features?.[0]?.icon
   const Icon = (iconName && ICON_MAP[iconName]) || Package
   const status = ext.status || 'not_installed'
@@ -375,11 +376,17 @@ function ExtensionCard({ ext, onDetails, onConsole, onAction, mutating }) {
           </div>
           <div className="flex items-center gap-2">
             {isCore ? (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/15 uppercase tracking-wider">
+              <span
+                className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/15 uppercase tracking-wider cursor-help"
+                title="Built-in service — managed by DreamServer"
+              >
                 core
               </span>
             ) : (
-              <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider ${statusStyle}`}>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider ${statusStyle} ${status === 'incompatible' ? 'cursor-help' : ''}`}
+                title={status === 'incompatible' ? `Requires ${ext.gpu_backends?.join(' or ') || 'specific GPU'} — your system: ${gpuBackend || 'unknown'}` : undefined}
+              >
                 {status.replace('_', ' ')}
               </span>
             )}
@@ -427,7 +434,8 @@ function ExtensionCard({ ext, onDetails, onConsole, onAction, mutating }) {
             </button>
           )}
           {!showInstall && !showRemove && !isToggleable && (
-            <div className="flex gap-1">
+            <div className="flex items-center gap-1" title={status === 'incompatible' && gpuBackend ? `Your system: ${gpuBackend}` : undefined}>
+              {status === 'incompatible' && <span className="text-[10px] text-zinc-600 mr-0.5">Requires:</span>}
               {ext.gpu_backends?.slice(0, 3).map(gpu => (
                 <span key={gpu} className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-600">{gpu}</span>
               ))}
@@ -469,7 +477,7 @@ function ExtensionCard({ ext, onDetails, onConsole, onAction, mutating }) {
   )
 }
 
-function DetailModal({ ext, onClose }) {
+function DetailModal({ ext, gpuBackend, onClose }) {
   if (!ext) return null
 
   const iconName = ext.features?.[0]?.icon
@@ -478,6 +486,7 @@ function DetailModal({ ext, onClose }) {
   const deps = ext.depends_on || []
   const features = ext.features || []
   const statusStyle = STATUS_STYLES[ext.status] || STATUS_STYLES.not_installed
+  const isIncompatible = ext.status === 'incompatible'
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
@@ -491,7 +500,10 @@ function DetailModal({ ext, onClose }) {
             <Icon size={22} className="text-zinc-400" />
             <div>
               <h3 className="text-lg font-semibold text-white">{ext.name}</h3>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${statusStyle}`}>
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full ${statusStyle}`}
+                title={isIncompatible ? `Requires ${ext.gpu_backends?.join(' or ') || 'specific GPU'} — your system: ${gpuBackend || 'unknown'}` : ext.source === 'core' ? 'Built-in service — managed by DreamServer' : undefined}
+              >
                 {(ext.status || 'not_installed').replace('_', ' ')}
               </span>
             </div>
@@ -514,6 +526,9 @@ function DetailModal({ ext, onClose }) {
             <div className="bg-zinc-800/50 rounded-lg p-3">
               <span className="text-zinc-500 text-xs block mb-1">GPU</span>
               <span className="text-white">{ext.gpu_backends?.join(', ') || 'none'}</span>
+              {isIncompatible && gpuBackend && (
+                <span className="text-orange-400 text-[10px] block mt-1">Your system: {gpuBackend}</span>
+              )}
             </div>
             <div className="bg-zinc-800/50 rounded-lg p-3">
               <span className="text-zinc-500 text-xs block mb-1">Category</span>
