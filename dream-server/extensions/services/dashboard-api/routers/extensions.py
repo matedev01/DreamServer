@@ -80,7 +80,7 @@ def _assert_not_core(service_id: str) -> None:
         )
 
 
-def _scan_compose_content(compose_path: Path) -> None:
+def _scan_compose_content(compose_path: Path, *, trusted: bool = False) -> None:
     """Reject compose files containing dangerous directives."""
     try:
         data = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
@@ -164,10 +164,10 @@ def _scan_compose_content(compose_path: Path) -> None:
                 status_code=400,
                 detail=f"Service '{svc_name}' runs as root",
             )
-        if "build" in svc_def:
+        if not trusted and "build" in svc_def:
             raise HTTPException(
                 status_code=400,
-                detail=f"Service '{svc_name}' contains a build context",
+                detail=f"Service '{svc_name}' uses a local build — only pre-built images are allowed for user extensions",
             )
         if svc_def.get("extra_hosts"):
             raise HTTPException(
@@ -504,7 +504,7 @@ def install_extension(service_id: str, api_key: str = Depends(verify_api_key)):
             # Security scan the staged copy (prevents TOCTOU)
             staged_compose = staged / "compose.yaml"
             if staged_compose.exists():
-                _scan_compose_content(staged_compose)
+                _scan_compose_content(staged_compose, trusted=True)
             os.rename(str(staged), str(dest))
         finally:
             if Path(tmpdir).exists():
