@@ -75,7 +75,7 @@ services:
       OPENAI_API_BASE_URL: "${LLM_API_URL:-http://llama-server:8080}/v1"
       OPENAI_API_KEY: ""
       WEBUI_AUTH: "${WEBUI_AUTH:-true}"
-      WEBUI_SECRET_KEY: "${WEBUI_SECRET:-changeme}"
+      WEBUI_SECRET_KEY: "${WEBUI_SECRET:?WEBUI_SECRET must be set — run the installer or add it to .env}"
       ENABLE_WEB_SEARCH: "true"
       WEB_SEARCH_ENGINE: "searxng"
       SEARXNG_QUERY_URL: "http://searxng:8080/search?q=<query>&format=json"
@@ -120,6 +120,14 @@ services:
       - ./data/open-webui:/app/backend/data
     ports:
       - "127.0.0.1:${WEBUI_PORT:-3000}:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s

@@ -23,11 +23,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate main docker-compose.base.yml
+        env:
+          WEBUI_SECRET: ci-placeholder
         run: |
           echo "Validating dream-server/docker-compose.base.yml"
           docker compose -f dream-server/docker-compose.base.yml config --quiet
 
       - name: Validate compose files in dream-server/compose/
+        env:
+          WEBUI_SECRET: ci-placeholder
         run: |
           compose_files=$(find dream-server/compose/ -name '*.yml' -type f 2>/dev/null || true)
 
