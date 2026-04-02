@@ -41,8 +41,6 @@ LLM_HOST="${LLM_HOST:-localhost}"
 LLM_PORT="${LLM_PORT:-8080}"
 TIMEOUT="${TIMEOUT:-5}"
 
-sr_load
-
 # Safe .env loading for port overrides (no eval; use lib/safe-env.sh)
 [[ -f "$SCRIPT_DIR/lib/safe-env.sh" ]] && . "$SCRIPT_DIR/lib/safe-env.sh"
 load_env_file "${INSTALL_DIR}/.env"
