@@ -272,10 +272,14 @@ if runtime["docker_daemon"] and not runtime["webui_http"]:
 # Extension-specific hints
 for ext in ext_diagnostics:
     ext_id = ext.get("id", "unknown")
+    container_state = ext.get("container_state", "unknown")
     issues = ext.get("issues", [])
     for issue in issues:
         if issue == "container_not_running":
-            fix_hints.append(f"Extension {ext_id}: container not running. Run 'dream start {ext_id}'.")
+            if container_state == "not_found":
+                fix_hints.append(f"Extension {ext_id}: not installed (image not built). Skipped by installer or disabled by tier system.")
+            else:
+                fix_hints.append(f"Extension {ext_id}: container not running. Run 'dream start {ext_id}'.")
         elif issue == "health_check_failed":
             fix_hints.append(f"Extension {ext_id}: health check failed. Check logs with 'docker logs dream-{ext_id}'.")
         elif issue == "gpu_backend_incompatible":

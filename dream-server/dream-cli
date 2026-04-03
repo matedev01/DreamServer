@@ -1072,7 +1072,7 @@ warnings = []
 if pf_checks:
     print(f"{CYAN}Preflight Checks:{NC}")
     for check in pf_checks:
-        name = check.get('name', 'Unknown')
+        name = check.get('name', check.get('id', 'Unknown'))
         status = check.get('status', 'unknown')
         message = check.get('message', '')
 
