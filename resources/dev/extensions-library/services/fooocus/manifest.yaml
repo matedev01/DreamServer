@@ -20,7 +20,7 @@ service:
   env_vars: []
 
 features:
-  - id: image-generation
+  - id: fooocus-image-generation
     name: Image Generation
     description: User-friendly image generation with Stable Diffusion
     icon: Image

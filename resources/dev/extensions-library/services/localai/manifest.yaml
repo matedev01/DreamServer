@@ -29,7 +29,7 @@ features:
       vram_gb: 4
     enabled_services_all: [localai]
     priority: 5
-  - id: image-generation
+  - id: localai-image-generation
     name: Image Generation
     description: Generate images with local diffusion models
     icon: Image
@@ -59,7 +59,7 @@ features:
       vram_gb: 16
     enabled_services_all: [localai]
     priority: 8
-  - id: voice-cloning
+  - id: localai-voice-cloning
     name: Voice Cloning
     description: Clone voices for TTS with local models
     icon: Mic

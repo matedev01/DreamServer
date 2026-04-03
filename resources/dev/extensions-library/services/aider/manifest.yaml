@@ -10,7 +10,6 @@ service:
   port: 0
   external_port_env: ''
   external_port_default: 0
-  health: ""
   type: docker
   gpu_backends: [amd, nvidia, apple]
   compose_file: compose.yaml

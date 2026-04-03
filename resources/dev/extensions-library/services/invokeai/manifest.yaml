@@ -23,7 +23,7 @@ service:
     and FLUX model compatibility. Best-in-class UI for serious creators.
 
 features:
-  - id: image-generation
+  - id: invokeai-image-generation
     name: Image Generation
     description: Professional Stable Diffusion image generation with FLUX support
     icon: Image

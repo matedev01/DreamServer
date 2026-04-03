@@ -29,7 +29,7 @@ service:
     - professional
 
 features:
-  - id: image-generation
+  - id: forge-image-generation
     name: Image Generation
     description: Full Stable Diffusion control with advanced settings
     icon: Image

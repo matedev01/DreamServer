@@ -36,7 +36,7 @@ features:
     priority: 7
     gpu_backends: [nvidia]
   
-  - id: sound-effects
+  - id: audiocraft-sound-effects
     name: Sound Effects
     description: Generate sound effects from text with AudioGen
     icon: Volume2

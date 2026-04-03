@@ -70,7 +70,7 @@ features:
     setup_time: ~2 minutes
     priority: 17
     gpu_backends: [nvidia]
-  - id: sound-effects
+  - id: bark-sound-effects
     name: Sound Effects
     description: Generate music snippets and ambient sound effects
     icon: Music

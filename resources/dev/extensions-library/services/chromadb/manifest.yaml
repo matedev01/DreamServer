@@ -3,7 +3,7 @@ schema_version: dream.services.v1
 service:
   id: chromadb
   name: ChromaDB
-  aliases: [chroma, vector-db]
+  aliases: [chroma]
   container_name: dream-chromadb
   host_env: CHROMADB_HOST
   default_host: chromadb

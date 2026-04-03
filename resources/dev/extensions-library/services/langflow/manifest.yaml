@@ -3,7 +3,7 @@ schema_version: dream.services.v1
 service:
   id: langflow
   name: Langflow
-  aliases: [langflow-ui, flow, visual-workflow]
+  aliases: [langflow-ui, visual-workflow]
   container_name: dream-langflow
   host_env: LANGFLOW_HOST
   default_host: langflow

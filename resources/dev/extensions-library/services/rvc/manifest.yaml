@@ -23,7 +23,7 @@ service:
       default: ""
 
 features:
-  - id: voice-cloning
+  - id: rvc-voice-cloning
     name: Voice Cloning
     description: Retrieval-based voice conversion and cloning
     icon: Mic

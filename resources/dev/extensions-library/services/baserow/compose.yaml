@@ -38,6 +38,12 @@ services:
       - "127.0.0.1:${BASEROW_PORT:-3007}:80"
     networks:
       - dream-network
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:80/api/_health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     deploy:
       resources:
         limits:

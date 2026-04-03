@@ -3,14 +3,14 @@ schema_version: dream.services.v1
 service:
   id: flowise
   name: Flowise
-  aliases: [flow, workflow]
+  aliases: [workflow]
   container_name: dream-flowise
   host_env: FLOWISE_HOST
   default_host: flowise
   port: 3000
   external_port_env: FLOWISE_PORT
   external_port_default: 7801
-  health: /api/v1/health
+  health: /api/v1/ping
   type: docker
   gpu_backends: [amd, nvidia, apple]
   category: optional

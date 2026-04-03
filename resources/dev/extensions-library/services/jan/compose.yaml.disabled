@@ -10,9 +10,9 @@ services:
     volumes:
       - ./data/jan:/app/server/jan:rw
     ports:
-      - "${JAN_PORT:-1337}:1337"
+      - "127.0.0.1:${JAN_PORT:-1337}:1337"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:1337/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:1337/health"]
       interval: 30s
       timeout: 10s
       retries: 3
