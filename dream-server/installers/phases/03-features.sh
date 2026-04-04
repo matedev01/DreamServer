@@ -91,6 +91,18 @@ else
 fi
 unset _comfyui_compose
 
+# Re-resolve compose flags now that feature selection may have disabled services.
+# Without this, Phases 4-11 use stale flags from Phase 2 that reference files
+# which were just renamed to .disabled.
+if [[ -x "$SCRIPT_DIR/scripts/resolve-compose-stack.sh" ]]; then
+    _refreshed_flags=$("$SCRIPT_DIR/scripts/resolve-compose-stack.sh" \
+        --script-dir "$SCRIPT_DIR" --tier "${TIER:-1}" --gpu-backend "${GPU_BACKEND:-nvidia}" 2>/dev/null) || true
+    if [[ -n "$_refreshed_flags" ]]; then
+        COMPOSE_FLAGS="$_refreshed_flags"
+        log "Compose flags refreshed after feature selection"
+    fi
+fi
+
 # All services are core — no profiles needed (compose profiles removed)
 
 # Select tier-appropriate OpenClaw config
