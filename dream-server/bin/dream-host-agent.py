@@ -219,6 +219,7 @@ def _resolve_container_name(service_id: str) -> str:
         result = subprocess.run(
             ["docker", "ps", "--filter",
              f"label=com.docker.compose.service={service_id}",
+             "--filter", "label=com.docker.compose.project=dream-server",
              "--format", "{{.Names}}"],
             capture_output=True, text=True, timeout=5,
         )
@@ -361,6 +362,9 @@ class AgentHandler(BaseHTTPRequestHandler):
                     "lines": 0,
                 })
                 return
+            if result.returncode != 0:
+                json_response(self, 500, {"error": f"docker logs failed: {(result.stderr or '')[:500]}"})
+                return
             output = result.stdout or result.stderr or ""
             json_response(self, 200, {
                 "service_id": sid,
@@ -370,6 +374,8 @@ class AgentHandler(BaseHTTPRequestHandler):
             })
         except subprocess.TimeoutExpired:
             json_response(self, 503, {"error": "Log fetch timed out"})
+        except Exception as exc:
+            json_response(self, 500, {"error": f"Failed to fetch logs: {exc}"})
 
 
     def _handle_setup_hook(self):
