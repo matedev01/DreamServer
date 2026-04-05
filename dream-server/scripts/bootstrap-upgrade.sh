@@ -58,10 +58,11 @@ get_remote_size() {
 # Write status JSON (atomic via mv)
 write_status() {
     local status="$1" percent="${2:-}" downloaded="${3:-0}" total="${4:-0}" speed="${5:-0}" eta="${6:-}"
+    local _safe_model="${FULL_GGUF_FILE//\"/\\\"}"
     cat > "$STATUS_FILE.tmp" << STATUSEOF
 {
   "status": "$status",
-  "model": "$FULL_GGUF_FILE",
+  "model": "$_safe_model",
   "percent": ${percent:-null},
   "bytesDownloaded": $downloaded,
   "bytesTotal": $total,
@@ -76,6 +77,14 @@ STATUSEOF
 # Background monitor: polls .part file size every 2s
 monitor_download() {
     local part_file="$1" total_bytes="$2"
+
+    # Wait for curl to create the .part file (up to 30s)
+    for _wait in $(seq 1 30); do
+        [[ -f "$part_file" ]] && break
+        sleep 1
+    done
+    [[ -f "$part_file" ]] || return 0
+
     local prev_bytes=0 prev_time
     prev_time=$(date +%s)
 
@@ -137,7 +146,7 @@ else
     # Start background download monitor
     monitor_download "$MODELS_DIR/$FULL_GGUF_FILE.part" "$TOTAL_BYTES" &
     _monitor_pid=$!
-    trap 'kill $_monitor_pid 2>/dev/null || true' EXIT TERM INT
+    trap 'kill $_monitor_pid 2>/dev/null || true; write_status "failed"' EXIT TERM INT
 
     # Download with resume support, retry up to 3 times
     _dl_success=false
@@ -296,15 +305,25 @@ elif [[ -f "$INSTALL_DIR/data/.llama-server.pid" ]]; then
         if [[ ! -f "$_model_path" ]]; then
             log "WARNING: Model file not found at $_model_path"
         else
-            # Stop existing native llama-server
+            # Capture old model path for rollback before we kill the process
             _old_pid=$(cat "$LLAMA_SERVER_PID_FILE" 2>/dev/null | tr -d '[:space:]')
+            _old_model_path=""
             if [[ -n "$_old_pid" ]] && kill -0 "$_old_pid" 2>/dev/null; then
-                log "Stopping native llama-server (PID $_old_pid)..."
-                kill "$_old_pid" 2>/dev/null || true
-                sleep 2
-                # Force kill if still running
-                if kill -0 "$_old_pid" 2>/dev/null; then
-                    kill -9 "$_old_pid" 2>/dev/null || true
+                _old_model_path=$(ps -p "$_old_pid" -o args= 2>/dev/null | grep -oE '\-\-model [^ ]+' | awk '{print $2}') || true
+            fi
+
+            # Stop existing native llama-server
+            if [[ -n "$_old_pid" ]] && kill -0 "$_old_pid" 2>/dev/null; then
+                # Verify it's actually llama-server (PID could have been reused)
+                if ps -p "$_old_pid" -o comm= 2>/dev/null | grep -q llama; then
+                    log "Stopping native llama-server (PID $_old_pid)..."
+                    kill "$_old_pid" 2>/dev/null || true
+                    sleep 2
+                    if kill -0 "$_old_pid" 2>/dev/null; then
+                        kill -9 "$_old_pid" 2>/dev/null || true
+                    fi
+                else
+                    log "PID $_old_pid is no longer llama-server, skipping kill"
                 fi
             fi
 
@@ -334,8 +353,23 @@ elif [[ -f "$INSTALL_DIR/data/.llama-server.pid" ]]; then
             if $_healthy; then
                 log "SUCCESS: Native llama-server running with ${_gguf_file} (PID $_new_pid)"
             else
-                log "WARNING: Native llama-server health check timed out. Model may still be loading."
-                log "Check: tail -50 $LLAMA_SERVER_LOG"
+                log "WARNING: New model failed to load. Attempting rollback..."
+                kill "$_new_pid" 2>/dev/null || true
+                if [[ -n "${_old_model_path:-}" && -f "$_old_model_path" ]]; then
+                    "$LLAMA_SERVER_BIN" \
+                        --host 0.0.0.0 --port 8080 \
+                        --model "$_old_model_path" \
+                        --ctx-size "$_ctx_size" \
+                        --n-gpu-layers 999 \
+                        --metrics \
+                        > "$LLAMA_SERVER_LOG" 2>&1 &
+                    _rollback_pid=$!
+                    echo "$_rollback_pid" > "$LLAMA_SERVER_PID_FILE"
+                    log "Rolled back to previous model: $(basename "$_old_model_path") (PID $_rollback_pid)"
+                else
+                    log "WARNING: Could not rollback — previous model not found."
+                    log "Run './dream-macos.sh restart' to manually recover."
+                fi
             fi
         fi
     fi
