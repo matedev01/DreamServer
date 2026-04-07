@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -20,6 +21,16 @@ os.environ.setdefault("DREAM_INSTALL_DIR", "/tmp/dream-test-install")
 os.environ.setdefault("DREAM_DATA_DIR", "/tmp/dream-test-data")
 os.environ.setdefault("DREAM_EXTENSIONS_DIR", "/tmp/dream-test-extensions")
 os.environ.setdefault("GPU_BACKEND", "nvidia")
+
+if "fcntl" not in sys.modules:
+    try:
+        import fcntl  # type: ignore # noqa: F401
+    except ModuleNotFoundError:
+        sys.modules["fcntl"] = types.SimpleNamespace(
+            LOCK_EX=0,
+            LOCK_UN=0,
+            flock=lambda *args, **kwargs: None,
+        )
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 

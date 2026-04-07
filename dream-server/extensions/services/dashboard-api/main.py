@@ -19,14 +19,15 @@ import json
 import logging
 import os
 import re
+import shlex
 import socket
 import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 
 # --- Local modules ---
@@ -78,7 +79,15 @@ _GPU_CACHE_TTL = 3.0
 _STATUS_CACHE_TTL = 2.0
 _STORAGE_CACHE_TTL = 30.0
 _SETTINGS_SUMMARY_CACHE_TTL = 5.0
+_SETTINGS_CONFIG_CACHE_TTL = 15.0
+_SETTINGS_ENV_CACHE_TTL = 5.0
 _SERVICE_POLL_INTERVAL = 10.0  # background health check interval
+
+_ENV_ASSIGNMENT_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+_ENV_COMMENTED_ASSIGNMENT_RE = re.compile(r"^\s*#\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+_SENSITIVE_ENV_KEY_RE = re.compile(
+    r"(SECRET|TOKEN|PASSWORD|(?:^|_)PASS(?:$|_)|API_KEY|PRIVATE_KEY|ENCRYPTION_KEY|(?:^|_)SALT(?:$|_))"
+)
 
 # --- Router imports ---
 from routers import workflows, features, setup, updates, agents, privacy, extensions, gpu as gpu_router, resources
@@ -251,6 +260,459 @@ def _fallback_services() -> list[dict]:
             "uptime": None,
         })
     return links
+
+
+def _resolve_runtime_env_path() -> Path:
+    install_root = _resolve_install_root()
+    env_path = install_root / ".env"
+    if env_path.exists():
+        return env_path
+    return Path(INSTALL_DIR) / ".env"
+
+
+def _resolve_bundled_path(name: str) -> Path:
+    return Path(__file__).resolve().parent / name
+
+
+def _resolve_template_path(name: str) -> Path:
+    install_root = _resolve_install_root()
+    for candidate in (
+        install_root / name,
+        _resolve_bundled_path(name),
+        Path(INSTALL_DIR) / name,
+    ):
+        if candidate.exists():
+            return candidate
+    return _resolve_bundled_path(name)
+
+
+def _strip_env_quotes(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def _read_env_map_from_path(path: Path) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    try:
+        return _parse_env_text(path.read_text(encoding="utf-8"))
+    except OSError:
+        return {}, []
+
+
+def _parse_env_text(raw_text: str) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    values: dict[str, str] = {}
+    issues: list[dict[str, Any]] = []
+
+    for index, line in enumerate(raw_text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        match = _ENV_ASSIGNMENT_RE.match(line)
+        if not match:
+            issues.append({
+                "key": None,
+                "line": index,
+                "message": "Line is not a valid KEY=value entry.",
+            })
+            continue
+
+        key, value = match.groups()
+        values[key] = _strip_env_quotes(value)
+
+    return values, issues
+
+
+def _normalize_bool(value: Any) -> Optional[str]:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "on"}:
+        return "true"
+    if text in {"false", "0", "no", "off"}:
+        return "false"
+    return None
+
+
+def _humanize_env_key(key: str) -> str:
+    return key.replace("_", " ").title().replace("Llm", "LLM").replace("Api", "API").replace("Gpu", "GPU")
+
+
+def _is_secret_field(key: str, definition: Optional[dict[str, Any]] = None) -> bool:
+    if definition is not None and "secret" in definition:
+        return bool(definition.get("secret"))
+
+    upper_key = key.upper()
+    if "PUBLIC_KEY" in upper_key:
+        return False
+    return bool(_SENSITIVE_ENV_KEY_RE.search(upper_key))
+
+
+def _slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def _load_env_schema() -> tuple[dict[str, Any], set[str]]:
+    schema_path = _resolve_template_path(".env.schema.json")
+    if not schema_path.exists():
+        return {}, set()
+
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {}, set()
+
+    properties = schema.get("properties", {})
+    required = set(schema.get("required", []))
+    if not isinstance(properties, dict):
+        properties = {}
+    return properties, required
+
+
+def _build_env_sections(schema_keys: list[str]) -> list[dict[str, Any]]:
+    example_path = _resolve_template_path(".env.example")
+    if not example_path.exists():
+        return [{
+            "id": "configuration",
+            "title": "Configuration",
+            "keys": schema_keys,
+        }]
+
+    try:
+        lines = example_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return [{
+            "id": "configuration",
+            "title": "Configuration",
+            "keys": schema_keys,
+        }]
+
+    sections: list[dict[str, Any]] = []
+    section_index: dict[str, dict[str, Any]] = {}
+    current = {"id": "configuration", "title": "Configuration", "keys": []}
+    sections.append(current)
+    section_index[current["id"]] = current
+
+    def ensure_section(title: str) -> dict[str, Any]:
+        slug = _slugify(title) or "configuration"
+        if slug in section_index:
+            return section_index[slug]
+        section = {"id": slug, "title": title, "keys": []}
+        sections.append(section)
+        section_index[slug] = section
+        return section
+
+    idx = 0
+    while idx < len(lines):
+        if (
+            idx + 2 < len(lines)
+            and lines[idx].lstrip().startswith("#")
+            and set(lines[idx].replace("#", "").strip()) <= {"═"}
+            and lines[idx + 1].lstrip().startswith("#")
+            and set(lines[idx + 2].replace("#", "").strip()) <= {"═"}
+        ):
+            title = lines[idx + 1].lstrip("#").strip()
+            if title:
+                current = ensure_section(title)
+            idx += 3
+            continue
+
+        match = _ENV_ASSIGNMENT_RE.match(lines[idx]) or _ENV_COMMENTED_ASSIGNMENT_RE.match(lines[idx])
+        if match:
+            key = match.group(1)
+            if key in schema_keys and key not in current["keys"]:
+                current["keys"].append(key)
+        idx += 1
+
+    remaining = [key for key in schema_keys if not any(key in section["keys"] for section in sections)]
+    if remaining:
+        extra = ensure_section("Advanced")
+        extra["keys"].extend(remaining)
+
+    return [section for section in sections if section["keys"]]
+
+
+def _build_env_fields(
+    schema_properties: dict[str, Any],
+    required_keys: set[str],
+    values: dict[str, str],
+) -> dict[str, dict[str, Any]]:
+    fields: dict[str, dict[str, Any]] = {}
+
+    for key, definition in schema_properties.items():
+        field_type = definition.get("type", "string")
+        value = values.get(key, "")
+        fields[key] = {
+            "key": key,
+            "label": _humanize_env_key(key),
+            "type": field_type,
+            "description": definition.get("description", ""),
+            "required": key in required_keys,
+            "secret": _is_secret_field(key, definition),
+            "enum": definition.get("enum", []),
+            "default": definition.get("default"),
+            "value": value,
+            "hasValue": value != "",
+        }
+
+    for key, value in values.items():
+        if key in fields:
+            fields[key]["value"] = value
+            fields[key]["hasValue"] = value != ""
+            continue
+        fields[key] = {
+            "key": key,
+            "label": _humanize_env_key(key),
+            "type": "string",
+            "description": "Local override not described by the built-in schema.",
+            "required": False,
+            "secret": _is_secret_field(key),
+            "enum": [],
+            "default": None,
+            "value": value,
+            "hasValue": value != "",
+        }
+
+    return fields
+
+
+def _validate_env_values(
+    values: dict[str, str],
+    fields: dict[str, dict[str, Any]],
+    parse_issues: Optional[list[dict[str, Any]]] = None,
+) -> list[dict[str, Any]]:
+    issues = list(parse_issues or [])
+
+    for key, field in fields.items():
+        value = values.get(key, "")
+        field_type = field.get("type", "string")
+        required = field.get("required", False)
+        enum_values = field.get("enum") or []
+
+        if value == "":
+            if required:
+                issues.append({"key": key, "message": "Required value is missing."})
+            continue
+
+        if enum_values and value not in enum_values:
+            issues.append({"key": key, "message": f"Must be one of: {', '.join(enum_values)}."})
+            continue
+
+        if field_type == "integer":
+            try:
+                int(str(value).strip())
+            except (TypeError, ValueError):
+                issues.append({"key": key, "message": "Must be a whole number."})
+        elif field_type == "boolean":
+            if _normalize_bool(value) is None:
+                issues.append({"key": key, "message": "Must be true or false."})
+
+    return issues
+
+
+def _serialize_form_values(
+    raw_values: dict[str, Any],
+    fields: dict[str, dict[str, Any]],
+    current_values: Optional[dict[str, str]] = None,
+) -> dict[str, str]:
+    serialized: dict[str, str] = {}
+    current_values = current_values or {}
+
+    for key, field in fields.items():
+        value = raw_values.get(key, current_values.get(key, ""))
+        if value is None:
+            serialized[key] = current_values.get(key, "") if field.get("secret") else ""
+            continue
+
+        field_type = field.get("type", "string")
+        if field.get("secret") and str(value).strip() == "":
+            serialized[key] = current_values.get(key, "")
+            continue
+        if field_type == "boolean":
+            normalized = _normalize_bool(value)
+            serialized[key] = normalized if normalized is not None else str(value).strip()
+        elif field_type == "integer":
+            serialized[key] = str(value).strip()
+        else:
+            serialized[key] = str(value)
+
+    return serialized
+
+
+def _render_env_from_values(values: dict[str, str]) -> str:
+    example_path = _resolve_template_path(".env.example")
+    seen: set[str] = set()
+    output_lines: list[str] = []
+
+    if example_path.exists():
+        try:
+            example_lines = example_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            example_lines = []
+    else:
+        example_lines = []
+
+    for line in example_lines:
+        assignment = _ENV_ASSIGNMENT_RE.match(line)
+        commented_assignment = _ENV_COMMENTED_ASSIGNMENT_RE.match(line)
+
+        if assignment:
+            key = assignment.group(1)
+            output_lines.append(f"{key}={values.get(key, '')}")
+            seen.add(key)
+            continue
+
+        if commented_assignment:
+            key = commented_assignment.group(1)
+            seen.add(key)
+            value = values.get(key, "")
+            if value != "":
+                output_lines.append(f"{key}={value}")
+            else:
+                output_lines.append(line)
+            continue
+
+        output_lines.append(line)
+
+    extras = [(key, value) for key, value in values.items() if key not in seen and value != ""]
+    if extras:
+        if output_lines and output_lines[-1] != "":
+            output_lines.append("")
+        output_lines.extend([
+            "# Additional Local Overrides",
+            "# Values below were preserved because they are not part of .env.example.",
+        ])
+        for key, value in extras:
+            output_lines.append(f"{key}={value}")
+
+    return "\n".join(output_lines).rstrip() + "\n"
+
+
+def _clear_settings_caches():
+    for key in ("settings_summary", "settings_env", "status"):
+        _cache._store.pop(key, None)
+
+
+def _build_settings_env_payload(*, raw_text: Optional[str] = None, backup_path: Optional[str] = None) -> dict:
+    env_path = _resolve_runtime_env_path()
+    if raw_text is None:
+        try:
+            raw_text = env_path.read_text(encoding="utf-8")
+        except OSError:
+            raw_text = ""
+
+    values, parse_issues = _parse_env_text(raw_text)
+    schema_properties, required_keys = _load_env_schema()
+    fields = _build_env_fields(schema_properties, required_keys, values)
+    sections = _build_env_sections(list(fields.keys()))
+    issues = _validate_env_values(values, fields, parse_issues)
+    public_fields: dict[str, dict[str, Any]] = {}
+    public_values: dict[str, str] = {}
+
+    for key, field in fields.items():
+        public_field = {**field}
+        if field.get("secret"):
+            public_field["value"] = ""
+            public_values[key] = ""
+        else:
+            public_values[key] = field["value"]
+        public_fields[key] = public_field
+
+    return {
+        "path": _relative_install_path(env_path),
+        "raw": "",
+        "values": public_values,
+        "fields": public_fields,
+        "sections": sections,
+        "issues": issues,
+        "saveHint": "Saving writes the .env file directly, keeps existing secret values when left blank, never sends stored secrets back to the browser, and stores a timestamped backup under data/config-backups first.",
+        "restartHint": "Most DreamServer services need a rebuild or restart before changed values fully take effect.",
+        "backupPath": backup_path,
+    }
+
+
+def _relative_install_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(_resolve_install_root())).replace("\\", "/")
+    except ValueError:
+        return str(path).replace("\\", "/")
+
+
+def _resolve_env_backup_root() -> Path:
+    backup_root = Path(DATA_DIR) / "config-backups"
+    backup_root.mkdir(parents=True, exist_ok=True)
+    return backup_root
+
+
+def _display_backup_path(path: Path) -> str:
+    data_root = Path(DATA_DIR)
+    try:
+        return f"data/{path.relative_to(data_root).as_posix()}"
+    except ValueError:
+        return str(path).replace("\\", "/")
+
+
+def _write_text_atomic(path: Path, raw_text: str):
+    temp_path = path.with_name(f"{path.name}.tmp-{os.getpid()}-{int(time.time() * 1000)}")
+    try:
+        try:
+            temp_path.write_text(raw_text, encoding="utf-8")
+            if path.exists():
+                try:
+                    shutil.copymode(path, temp_path)
+                except OSError:
+                    pass
+            os.replace(temp_path, path)
+            return
+        except PermissionError:
+            if not path.exists():
+                raise
+            path.write_text(raw_text, encoding="utf-8")
+            return
+    finally:
+        try:
+            if temp_path.exists():
+                temp_path.unlink()
+        except OSError:
+            pass
+
+
+def _prepare_env_save(payload: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+    mode = payload.get("mode", "form")
+    env_path = _resolve_runtime_env_path()
+    current_values, _ = _read_env_map_from_path(env_path)
+    schema_properties, required_keys = _load_env_schema()
+
+    if mode != "form":
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "Only form-based editing is supported for security reasons."},
+        )
+
+    submitted_values = payload.get("values", {})
+    if not isinstance(submitted_values, dict):
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "Form configuration payload must be an object."},
+        )
+
+    base_fields = _build_env_fields(schema_properties, required_keys, current_values)
+    invalid_keys = sorted(set(submitted_values.keys()) - set(base_fields.keys()))
+    if invalid_keys:
+        return _render_env_from_values(current_values), [
+            {
+                "key": key,
+                "message": "Field is not editable from the dashboard. Only schema-backed fields and existing local overrides can be changed here.",
+            }
+            for key in invalid_keys
+        ]
+
+    normalized_values = _serialize_form_values(submitted_values, base_fields, current_values)
+    merged_values = {**current_values, **normalized_values}
+    merged_fields = _build_env_fields(schema_properties, required_keys, merged_values)
+    issues = _validate_env_values(merged_values, merged_fields)
+    return _render_env_from_values(merged_values), issues
 
 # --- App ---
 
@@ -710,6 +1172,69 @@ async def api_settings_summary(api_key: str = Depends(verify_api_key)):
         "manifest_errors": MANIFEST_ERRORS,
     }
     _cache.set("settings_summary", result, _SETTINGS_SUMMARY_CACHE_TTL)
+    return result
+
+
+@app.get("/api/settings/env")
+async def api_settings_env(api_key: str = Depends(verify_api_key)):
+    cached = _cache.get("settings_env")
+    if cached is not None:
+        return cached
+
+    result = await asyncio.to_thread(_build_settings_env_payload)
+    _cache.set("settings_env", result, _SETTINGS_ENV_CACHE_TTL)
+    return result
+
+
+@app.put("/api/settings/env")
+async def api_settings_env_save(
+    payload: dict[str, Any] = Body(...),
+    api_key: str = Depends(verify_api_key),
+):
+    env_path = _resolve_runtime_env_path()
+    raw_text, issues = await asyncio.to_thread(_prepare_env_save, payload)
+    if issues:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Configuration validation failed.",
+                "issues": issues,
+            },
+        )
+
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    backup_root = await asyncio.to_thread(_resolve_env_backup_root)
+    backup_path = backup_root / f".env.backup.{timestamp}"
+    backup_relative = None
+
+    if env_path.exists():
+        try:
+            shutil.copy2(env_path, backup_path)
+            backup_relative = _display_backup_path(backup_path)
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "message": "Could not create a configuration backup before saving.",
+                    "reason": str(exc),
+                },
+            ) from exc
+
+    try:
+        await asyncio.to_thread(_write_text_atomic, env_path, raw_text)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Could not write the updated environment file.",
+                "reason": str(exc),
+            },
+        ) from exc
+
+    _clear_settings_caches()
+    result = await asyncio.to_thread(_build_settings_env_payload, raw_text=raw_text, backup_path=backup_relative)
+    _cache.set("settings_env", result, _SETTINGS_ENV_CACHE_TTL)
     return result
 
 

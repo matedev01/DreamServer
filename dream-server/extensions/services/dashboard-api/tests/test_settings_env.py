@@ -1,0 +1,187 @@
+"""Security-focused tests for the Settings environment editor."""
+
+import json
+
+import pytest
+
+
+@pytest.fixture()
+def settings_env_fixture(tmp_path, monkeypatch):
+    install_root = tmp_path / "dream-server"
+    install_root.mkdir()
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+
+    env_path = install_root / ".env"
+    example_path = install_root / ".env.example"
+    schema_path = install_root / ".env.schema.json"
+
+    env_path.write_text(
+        "OPENAI_API_KEY=sk-live-secret\n"
+        "LLM_BACKEND=local\n"
+        "WEBUI_AUTH=true\n",
+        encoding="utf-8",
+    )
+
+    example_path.write_text(
+        "# ════════════════════════════════\n"
+        "# LLM Settings\n"
+        "# ════════════════════════════════\n"
+        "OPENAI_API_KEY=\n"
+        "LLM_BACKEND=local\n"
+        "WEBUI_AUTH=true\n",
+        encoding="utf-8",
+    )
+
+    schema_path.write_text(
+        json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "OPENAI_API_KEY": {
+                        "type": "string",
+                        "description": "Key used for cloud LLM providers.",
+                        "secret": True,
+                    },
+                    "LLM_BACKEND": {
+                        "type": "string",
+                        "description": "Primary LLM backend mode.",
+                        "enum": ["local", "cloud"],
+                        "default": "local",
+                    },
+                    "WEBUI_AUTH": {
+                        "type": "boolean",
+                        "description": "Require login for the WebUI.",
+                        "default": True,
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("main._resolve_install_root", lambda: install_root)
+    monkeypatch.setattr("main._resolve_runtime_env_path", lambda: env_path)
+    monkeypatch.setattr("main.DATA_DIR", str(data_root))
+
+    def fake_resolve_template(name: str):
+        if name == ".env.example":
+            return example_path
+        if name == ".env.schema.json":
+            return schema_path
+        return install_root / name
+
+    monkeypatch.setattr("main._resolve_template_path", fake_resolve_template)
+
+    from main import _cache
+
+    _cache._store.clear()
+
+    return {
+        "install_root": install_root,
+        "data_root": data_root,
+        "env_path": env_path,
+    }
+
+
+def test_api_settings_env_masks_secret_values(test_client, settings_env_fixture):
+    response = test_client.get("/api/settings/env", headers=test_client.auth_headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["path"] == ".env"
+    assert payload["raw"] == ""
+    assert payload["values"]["OPENAI_API_KEY"] == ""
+    assert payload["fields"]["OPENAI_API_KEY"]["value"] == ""
+    assert payload["fields"]["OPENAI_API_KEY"]["hasValue"] is True
+    assert payload["fields"]["OPENAI_API_KEY"]["secret"] is True
+    assert payload["values"]["LLM_BACKEND"] == "local"
+    assert payload["fields"]["LLM_BACKEND"]["value"] == "local"
+
+
+def test_api_settings_env_preserves_existing_secret_when_blank(test_client, settings_env_fixture):
+    env_path = settings_env_fixture["env_path"]
+
+    response = test_client.put(
+        "/api/settings/env",
+        headers=test_client.auth_headers,
+        json={
+            "mode": "form",
+            "values": {
+                "OPENAI_API_KEY": "",
+                "LLM_BACKEND": "cloud",
+                "WEBUI_AUTH": "false",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    updated_env = env_path.read_text(encoding="utf-8")
+
+    assert "OPENAI_API_KEY=sk-live-secret" in updated_env
+    assert "LLM_BACKEND=cloud" in updated_env
+    assert "WEBUI_AUTH=false" in updated_env
+    assert payload["values"]["OPENAI_API_KEY"] == ""
+    assert payload["fields"]["OPENAI_API_KEY"]["hasValue"] is True
+    assert payload["backupPath"].startswith("data/config-backups/.env.backup.")
+
+
+def test_api_settings_env_rejects_raw_mode(test_client, settings_env_fixture):
+    response = test_client.put(
+        "/api/settings/env",
+        headers=test_client.auth_headers,
+        json={"mode": "raw", "raw": "OPENAI_API_KEY=oops\n"},
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["detail"]["message"] == "Only form-based editing is supported for security reasons."
+
+
+def test_api_settings_env_rejects_new_unknown_keys(test_client, settings_env_fixture):
+    response = test_client.put(
+        "/api/settings/env",
+        headers=test_client.auth_headers,
+        json={
+            "mode": "form",
+            "values": {
+                "OPENAI_API_KEY": "",
+                "INJECTED_FLAG": "true",
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["detail"]["message"] == "Configuration validation failed."
+    assert payload["detail"]["issues"] == [
+        {
+            "key": "INJECTED_FLAG",
+            "message": "Field is not editable from the dashboard. Only schema-backed fields and existing local overrides can be changed here.",
+        }
+    ]
+
+
+def test_api_settings_env_allows_existing_local_override(test_client, settings_env_fixture):
+    env_path = settings_env_fixture["env_path"]
+    env_path.write_text(
+        env_path.read_text(encoding="utf-8") + "LOCAL_OVERRIDE=keep-me\n",
+        encoding="utf-8",
+    )
+
+    response = test_client.put(
+        "/api/settings/env",
+        headers=test_client.auth_headers,
+        json={
+            "mode": "form",
+            "values": {
+                "LOCAL_OVERRIDE": "updated",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    updated_env = env_path.read_text(encoding="utf-8")
+    assert "LOCAL_OVERRIDE=updated" in updated_env

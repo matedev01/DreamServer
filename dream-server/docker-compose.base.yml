@@ -177,7 +177,9 @@ services:
       - ./scripts:/dream-server/scripts:ro
       - ./config:/dream-server/config:ro
       - ./extensions:/dream-server/extensions:ro
-      - ./.env:/dream-server/.env:ro
+      - ./.env:/dream-server/.env
+      - ./.env.example:/dream-server/.env.example:ro
+      - ./.env.schema.json:/dream-server/.env.schema.json:ro
       - ./data:/data
     deploy:
       resources:
