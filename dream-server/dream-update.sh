@@ -131,7 +131,7 @@ snapshot_pre_update() {
 
     # .env and .env.* variants
     for pattern in ".env" ".env.*"; do
-        for f in ${INSTALL_DIR}/${pattern}; do
+        for f in "${INSTALL_DIR}"/${pattern}; do
             [[ -f "$f" ]] || continue
             cp "$f" "${snap_dir}/"
             files_saved=$(( files_saved + 1 ))
@@ -456,7 +456,7 @@ cmd_backup() {
     # Backup compose files
     local files_backed_up=0
     for pattern in "docker-compose*.yml" "docker-compose*.yaml" ".env" ".env.*"; do
-        for file in ${INSTALL_DIR}/${pattern}; do
+        for file in "${INSTALL_DIR}"/${pattern}; do
             if [[ -f "$file" ]]; then
                 cp "$file" "$backup_path/"
                 ((files_backed_up++))
@@ -512,11 +512,18 @@ cmd_update() {
     local snap_dir
     snap_dir=$(snapshot_pre_update "$timestamp")
 
+    # Read GPU config from .env for compose resolution
+    local _update_gpu_backend _update_tier
+    _update_gpu_backend=$(grep '^GPU_BACKEND=' "${INSTALL_DIR}/.env" 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "")
+    _update_tier=$(grep '^TIER=' "${INSTALL_DIR}/.env" 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "")
+
     # Resolve compose flags once — used in restart and rollback paths.
     local compose_flags=""
     if [[ -x "${INSTALL_DIR}/scripts/resolve-compose-stack.sh" ]]; then
         compose_flags=$(bash "${INSTALL_DIR}/scripts/resolve-compose-stack.sh" \
-            --script-dir "$INSTALL_DIR" | tail -1)
+            --script-dir "$INSTALL_DIR" \
+            --tier "${_update_tier:-1}" \
+            --gpu-backend "${_update_gpu_backend:-nvidia}" | tail -1)
     fi
     if [[ -n "${compose_flags}" ]]; then
         local all_exist=true
