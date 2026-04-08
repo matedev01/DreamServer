@@ -349,37 +349,40 @@ MODELS_INI_EOF
         printf "\r  ${BGRN}✓${NC} %-60s\n" "All containers launched"
         echo ""
         ai_ok "Services started (llama-server)"
-
-        # ── Bootstrap: launch background full-model download + auto hot-swap ──
-        if [[ "$_BOOTSTRAP_ACTIVE" == "true" ]]; then
-            ai "Launching background download for $FULL_LLM_MODEL..."
-
-            # Source background task tracking if not already loaded
-            if ! command -v bg_task_start &>/dev/null && [[ -f "$SCRIPT_DIR/installers/lib/background-tasks.sh" ]]; then
-                . "$SCRIPT_DIR/installers/lib/background-tasks.sh"
-            fi
-
-            nohup bash "$SCRIPT_DIR/scripts/bootstrap-upgrade.sh" \
-                "$INSTALL_DIR" "$FULL_GGUF_FILE" "$FULL_GGUF_URL" \
-                "$FULL_GGUF_SHA256" "$FULL_LLM_MODEL" "$FULL_MAX_CONTEXT" \
-                > "$INSTALL_DIR/logs/model-upgrade.log" 2>&1 &
-            _upgrade_pid=$!
-
-            if command -v bg_task_start &>/dev/null; then
-                bg_task_start "full-model-download" "$_upgrade_pid" \
-                    "Full model download: $FULL_LLM_MODEL" \
-                    "$INSTALL_DIR/logs/model-upgrade.log"
-            fi
-
-            log "Background model upgrade started (PID: $_upgrade_pid)"
-            ai "Full model ($FULL_LLM_MODEL) downloading in background."
-            ai "It will auto-swap when ready. Check progress: tail -f $INSTALL_DIR/logs/model-upgrade.log"
-        fi
     else
         printf "\r  ${RED}✗${NC} %-60s\n" "Some containers failed to launch"
         echo ""
         ai_warn "Some services failed. Check: docker compose logs"
         ai_warn "Log file: $LOG_FILE"
+    fi
+
+    # ── Bootstrap: launch background full-model download + auto hot-swap ──
+    # Runs regardless of compose_ok — the download only needs disk + network.
+    # bootstrap-upgrade.sh checks if Docker is running before attempting
+    # hot-swap and handles it gracefully if containers aren't ready yet.
+    if [[ "$_BOOTSTRAP_ACTIVE" == "true" ]]; then
+        ai "Launching background download for $FULL_LLM_MODEL..."
+
+        # Source background task tracking if not already loaded
+        if ! command -v bg_task_start &>/dev/null && [[ -f "$SCRIPT_DIR/installers/lib/background-tasks.sh" ]]; then
+            . "$SCRIPT_DIR/installers/lib/background-tasks.sh"
+        fi
+
+        nohup bash "$SCRIPT_DIR/scripts/bootstrap-upgrade.sh" \
+            "$INSTALL_DIR" "$FULL_GGUF_FILE" "$FULL_GGUF_URL" \
+            "$FULL_GGUF_SHA256" "$FULL_LLM_MODEL" "$FULL_MAX_CONTEXT" \
+            > "$INSTALL_DIR/logs/model-upgrade.log" 2>&1 &
+        _upgrade_pid=$!
+
+        if command -v bg_task_start &>/dev/null; then
+            bg_task_start "full-model-download" "$_upgrade_pid" \
+                "Full model download: $FULL_LLM_MODEL" \
+                "$INSTALL_DIR/logs/model-upgrade.log"
+        fi
+
+        log "Background model upgrade started (PID: $_upgrade_pid)"
+        ai "Full model ($FULL_LLM_MODEL) downloading in background."
+        ai "It will auto-swap when ready. Check progress: tail -f $INSTALL_DIR/logs/model-upgrade.log"
     fi
 
     dream_progress 83 "services" "Running extension setup hooks"
