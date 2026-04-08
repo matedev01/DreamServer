@@ -47,9 +47,9 @@ if $INTERACTIVE && ! $DRY_RUN; then
         echo
         [[ $REPLY =~ ^[Nn]$ ]] || ENABLE_COMFYUI=true
 
-        read -p "  Enable DreamForge agentic coding assistant (~15 min build)? [y/N] " -r < /dev/tty
+        read -p "  Enable DreamForge agentic coding assistant? [Y/n] " -r < /dev/tty
         echo
-        [[ $REPLY =~ ^[Yy]$ ]] && ENABLE_DREAMFORGE=true
+        [[ $REPLY =~ ^[Nn]$ ]] || ENABLE_DREAMFORGE=true
 
         # Warn if ComfyUI enabled on low-tier hardware
         if [[ "$ENABLE_COMFYUI" == "true" ]]; then

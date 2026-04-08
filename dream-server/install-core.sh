@@ -95,7 +95,7 @@ ENABLE_WORKFLOWS=true
 ENABLE_RAG=true
 ENABLE_OPENCLAW=true
 ENABLE_COMFYUI=true
-ENABLE_DREAMFORGE=false
+ENABLE_DREAMFORGE=true
 INTERACTIVE=true
 DREAM_MODE="${DREAM_MODE:-local}"
 OFFLINE_MODE=false   # M1 integration: fully air-gapped operation
@@ -120,8 +120,8 @@ Options:
     --openclaw        Enable OpenClaw AI agent framework
     --comfyui         Enable ComfyUI image generation
     --no-comfyui      Disable ComfyUI image generation (saves ~34GB)
-    --dreamforge      Enable DreamForge agentic coding assistant
-    --no-dreamforge   Disable DreamForge (default, saves ~15 min build time)
+    --dreamforge      Enable DreamForge agentic coding assistant (default)
+    --no-dreamforge   Disable DreamForge
     --all             Enable all optional services
     --non-interactive Run without prompts (use defaults or flags)
     --offline         M1 mode: Configure for fully offline/air-gapped operation
