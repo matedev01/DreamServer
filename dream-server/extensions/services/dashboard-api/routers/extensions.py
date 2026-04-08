@@ -405,13 +405,28 @@ async def extensions_catalog(
     from user_extensions import get_user_services_cached
 
     user_svc_configs = get_user_services_cached(USER_EXTENSIONS_DIR)
+
+    # Only health-check extensions that declare a health endpoint
+    checkable = {sid: cfg for sid, cfg in user_svc_configs.items() if cfg.get("health")}
     user_health_tasks = [
-        check_service_health(sid, cfg) for sid, cfg in user_svc_configs.items()
+        check_service_health(sid, cfg) for sid, cfg in checkable.items()
     ]
     user_health = await asyncio.gather(*user_health_tasks, return_exceptions=True)
-    for (sid, _), result in zip(user_svc_configs.items(), user_health):
+    for (sid, _), result in zip(checkable.items(), user_health):
         if not isinstance(result, BaseException):
             services_by_id[sid] = result
+
+    # Extensions without health endpoints — assume running if scanned
+    # (presence in user_svc_configs means compose.yaml + manifest exist)
+    from models import ServiceStatus
+    for sid, cfg in user_svc_configs.items():
+        if not cfg.get("health") and sid not in services_by_id:
+            services_by_id[sid] = ServiceStatus(
+                id=sid, name=cfg.get("name", sid),
+                port=cfg.get("port", 0),
+                external_port=cfg.get("external_port", cfg.get("port", 0)),
+                status="healthy", response_time_ms=None,
+            )
 
     extensions = []
     for ext in EXTENSION_CATALOG:
@@ -478,13 +493,25 @@ async def extension_detail(
     services_by_id = {s.id: s for s in service_list}
 
     user_svc_configs = get_user_services_cached(USER_EXTENSIONS_DIR)
+
+    checkable = {sid: cfg for sid, cfg in user_svc_configs.items() if cfg.get("health")}
     user_health_tasks = [
-        check_service_health(sid, cfg) for sid, cfg in user_svc_configs.items()
+        check_service_health(sid, cfg) for sid, cfg in checkable.items()
     ]
     user_health = await asyncio.gather(*user_health_tasks, return_exceptions=True)
-    for (sid, _), result in zip(user_svc_configs.items(), user_health):
+    for (sid, _), result in zip(checkable.items(), user_health):
         if not isinstance(result, BaseException):
             services_by_id[sid] = result
+
+    from models import ServiceStatus
+    for sid, cfg in user_svc_configs.items():
+        if not cfg.get("health") and sid not in services_by_id:
+            services_by_id[sid] = ServiceStatus(
+                id=sid, name=cfg.get("name", sid),
+                port=cfg.get("port", 0),
+                external_port=cfg.get("external_port", cfg.get("port", 0)),
+                status="healthy", response_time_ms=None,
+            )
 
     status = _compute_extension_status(ext, services_by_id)
     installable = _is_installable(service_id)

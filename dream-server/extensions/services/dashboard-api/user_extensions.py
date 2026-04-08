@@ -62,20 +62,19 @@ def scan_user_extension_services(
         if not isinstance(svc, dict):
             continue
 
-        health = svc.get("health")
-        if not health:
-            continue
+        health = svc.get("health") or ""
 
         try:
-            # Validate health path (must be a string)
-            if not isinstance(health, str):
-                raise TypeError(f"health must be a string, got {type(health).__name__}")
-            if not _HEALTH_PATH_RE.match(health):
-                logger.warning("Rejected health path for %s: %r", service_id, health)
-                continue
-            if any(bad in health for bad in _HEALTH_PATH_REJECT):
-                logger.warning("Rejected health path for %s: %r", service_id, health)
-                continue
+            if health:
+                # Validate health path (must be a string)
+                if not isinstance(health, str):
+                    raise TypeError(f"health must be a string, got {type(health).__name__}")
+                if not _HEALTH_PATH_RE.match(health):
+                    logger.warning("Rejected health path for %s: %r", service_id, health)
+                    continue
+                if any(bad in health for bad in _HEALTH_PATH_REJECT):
+                    logger.warning("Rejected health path for %s: %r", service_id, health)
+                    continue
 
             port = svc.get("port", 0)
             name = svc.get("name", service_id)
