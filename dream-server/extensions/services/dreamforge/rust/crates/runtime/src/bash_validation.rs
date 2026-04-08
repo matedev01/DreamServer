@@ -1,4 +1,4 @@
-// DreamForge — local agentic coding assistant
+// DreamForge — local agent system
 // Copyright (c) 2026 Light-Heart-Labs. All rights reserved.
 
 //! Bash command validation submodules.

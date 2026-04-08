@@ -1,4 +1,4 @@
-// DreamForge — local agentic coding assistant
+// DreamForge — local agent system
 // Copyright (c) 2026 Light-Heart-Labs. All rights reserved.
 
 //! Lane completion detector — automatically marks lanes as completed when

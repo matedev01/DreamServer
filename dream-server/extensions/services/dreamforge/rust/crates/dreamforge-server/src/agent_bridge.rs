@@ -803,7 +803,7 @@ fn build_system_prompt(
         Err(e) => {
             warn!("load_system_prompt failed ({}), using fallback", e);
             vec![
-                "You are DreamForge, a local agentic coding assistant powered by the user's own GPU.".to_string(),
+                "You are DreamForge, a local agent system powered by the user's own GPU.".to_string(),
             ]
         }
     };

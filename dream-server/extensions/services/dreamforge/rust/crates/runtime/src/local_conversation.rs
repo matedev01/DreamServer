@@ -1,4 +1,4 @@
-// DreamForge — local agentic coding assistant
+// DreamForge — local agent system
 // Copyright (c) 2026 Light-Heart-Labs. All rights reserved.
 //! Local-first conversation runtime for DreamForge.
 //! Wraps the core ConversationRuntime with features optimized for

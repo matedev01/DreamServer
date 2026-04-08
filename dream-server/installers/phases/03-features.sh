@@ -47,7 +47,7 @@ if $INTERACTIVE && ! $DRY_RUN; then
         echo
         [[ $REPLY =~ ^[Nn]$ ]] || ENABLE_COMFYUI=true
 
-        read -p "  Enable DreamForge agentic coding assistant? [Y/n] " -r < /dev/tty
+        read -p "  Enable DreamForge agent system? [Y/n] " -r < /dev/tty
         echo
         [[ $REPLY =~ ^[Nn]$ ]] || ENABLE_DREAMFORGE=true
 
@@ -105,7 +105,7 @@ if [[ "${ENABLE_DREAMFORGE:-}" == "true" ]]; then
 else
     if [[ -f "$_dreamforge_compose" ]]; then
         mv "$_dreamforge_compose" "${_dreamforge_compose}.disabled"
-        log "DreamForge compose disabled (agentic coding not enabled)"
+        log "DreamForge compose disabled (agent system not enabled)"
     fi
 fi
 unset _dreamforge_compose

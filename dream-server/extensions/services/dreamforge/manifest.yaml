@@ -20,7 +20,7 @@ service:
   category: optional
   depends_on: [llama-server]
   description: >
-    Local agentic coding assistant powered by the DreamForge Rust engine.
+    Local agent system powered by the DreamForge Rust engine.
     40+ tools for file editing, bash execution, search, and MCP integration.
     Features RAG pipeline, persistent memory, secret scanning, and enterprise RBAC.
 

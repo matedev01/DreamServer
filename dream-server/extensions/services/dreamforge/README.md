@@ -1,6 +1,6 @@
 # DreamForge
 
-A local agentic coding tool that runs entirely on your own GPU. No cloud dependency. No data leaves your machine.
+A local agent system that runs entirely on your own GPU. No cloud dependency. No data leaves your machine.
 
 DreamForge connects to a local LLM (via [LM Studio](https://lmstudio.ai), [llama.cpp](https://github.com/ggml-org/llama.cpp), [vLLM](https://github.com/vllm-project/vllm), or [Ollama](https://ollama.com)) and provides a web-based interface for AI-assisted coding — reading files, writing code, running commands, searching your codebase, and iterating autonomously. Built as an extension for [DreamServer](https://github.com/Light-Heart-Labs/DreamServer).
 

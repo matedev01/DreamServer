@@ -29,7 +29,7 @@ export default function App() {
         <header className="flex items-center justify-between px-4 py-2 border-b border-gray-800 bg-gray-900/50">
           <div className="flex items-center gap-2">
             <span className="text-dream-400 font-bold text-lg">DreamForge</span>
-            <span className="text-xs text-gray-500">local agentic coding</span>
+            <span className="text-xs text-gray-500">local agent system</span>
           </div>
           <div className="flex items-center gap-4">
             {ws.modelName && (
