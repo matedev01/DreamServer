@@ -239,25 +239,31 @@ export default function Dashboard({ status, loading }) {
   const systemMetrics = []
 
   if (status?.gpu) {
-    systemMetrics.push({
-      icon: Activity,
-      label: 'GPU',
-      value: `${status.gpu.utilization}%`,
-      subvalue: status.gpu.name.replace('NVIDIA ', '').replace('AMD ', ''),
-      percent: status.gpu.utilization,
-    })
-
     if (status.gpu.memoryType === 'unified') {
+      // Apple Silicon: GPU utilization isn't available (always 0), show chip info instead
+      systemMetrics.push({
+        icon: Zap,
+        label: 'Chip',
+        value: status.gpu.name.replace('Apple ', ''),
+        subvalue: 'Apple Silicon',
+      })
       if (status?.ram) {
         systemMetrics.push({
           icon: HardDrive,
           label: 'Mem Used',
           value: `${status.ram.used_gb} GB`,
-          subvalue: `of ${status.ram.total_gb} GB`,
+          subvalue: `of ${status.ram.total_gb} GB unified`,
           percent: status.ram.percent,
         })
       }
     } else {
+      systemMetrics.push({
+        icon: Activity,
+        label: 'GPU',
+        value: `${status.gpu.utilization}%`,
+        subvalue: status.gpu.name.replace('NVIDIA ', '').replace('AMD ', ''),
+        percent: status.gpu.utilization,
+      })
       systemMetrics.push({
         icon: HardDrive,
         label: 'VRAM',
@@ -297,8 +303,9 @@ export default function Dashboard({ status, loading }) {
     })
   }
 
-  systemMetrics.push(
-    {
+  // GPU Temp: skip on Apple Silicon (always 0, not readable without IOKit)
+  if (status?.gpu?.memoryType !== 'unified') {
+    systemMetrics.push({
       icon: Thermometer,
       label: 'GPU Temp',
       value: status?.gpu?.temperature != null ? `${status.gpu.temperature}°C` : '—',
@@ -306,7 +313,10 @@ export default function Dashboard({ status, loading }) {
         ? status.gpu.temperature < 70 ? 'normal' : status.gpu.temperature < 85 ? 'warm' : 'hot'
         : 'thermal',
       alert: status?.gpu?.temperature >= 85,
-    },
+    })
+  }
+
+  systemMetrics.push(
     {
       icon: Brackets,
       label: 'Context',
@@ -416,6 +426,7 @@ export default function Dashboard({ status, loading }) {
               cpuTemp={status?.cpu?.temp_c}
               memFree={status?.ram ? Math.max(status.ram.total_gb - status.ram.used_gb, 0) : null}
               contextValue={status?.inference?.contextSize ? `${(status.inference.contextSize / 1024).toFixed(0)}k` : '—'}
+              isUnifiedMemory={status?.gpu?.memoryType === 'unified'}
             />
           </div>
           <div className="liquid-metal-sequence-grid liquid-metal-sequence-grid--system grid grid-cols-2 gap-1.5 self-start">
@@ -536,6 +547,7 @@ const TokenSignalPanel = memo(function TokenSignalPanel({
   cpuTemp,
   memFree,
   contextValue,
+  isUnifiedMemory,
 }) {
   const throughputSeries = useMemo(() => buildTokenSamples(tokensPerSecond), [tokensPerSecond])
   const generatedSeries = useMemo(() => buildGeneratedTokenSamples(totalTokens), [totalTokens])
@@ -555,12 +567,16 @@ const TokenSignalPanel = memo(function TokenSignalPanel({
       </div>
 
       <div className="mb-3 flex flex-wrap gap-1.5">
-        <div className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-theme-text-secondary">
-          GPU Temp {gpuTemp != null ? `${gpuTemp}°C` : '—'}
-        </div>
-        <div className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-theme-text-secondary">
-          CPU Temp {cpuTemp != null ? `${cpuTemp}°C` : 'Unavailable'}
-        </div>
+        {!isUnifiedMemory && (
+          <div className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-theme-text-secondary">
+            GPU Temp {gpuTemp != null ? `${gpuTemp}°C` : '—'}
+          </div>
+        )}
+        {cpuTemp != null && (
+          <div className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-theme-text-secondary">
+            CPU Temp {cpuTemp}°C
+          </div>
+        )}
         <div className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-theme-text-secondary">
           Mem Free {memFree != null ? `${memFree.toFixed(1)} GB` : '—'}
         </div>
