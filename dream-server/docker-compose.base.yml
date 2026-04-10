@@ -182,6 +182,7 @@ services:
       - ./.env.example:/dream-server/.env.example:ro
       - ./.env.schema.json:/dream-server/.env.schema.json:ro
       - ./data:/data
+      - ./templates:/dream-server/templates:ro
     deploy:
       resources:
         limits:

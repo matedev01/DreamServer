@@ -122,7 +122,7 @@ _MANUAL_RESTART_KEYS = {
 }
 
 # --- Router imports ---
-from routers import workflows, features, setup, updates, agents, privacy, extensions, gpu as gpu_router, resources, voice, models as models_router
+from routers import workflows, features, setup, updates, agents, privacy, extensions, gpu as gpu_router, resources, voice, models as models_router, templates
 
 logger = logging.getLogger(__name__)
 
@@ -928,6 +928,7 @@ app.include_router(gpu_router.router)
 app.include_router(resources.router)
 app.include_router(voice.router)
 app.include_router(models_router.router)
+app.include_router(templates.router)
 
 
 # ================================================================

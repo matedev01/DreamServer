@@ -768,12 +768,15 @@ async def extension_logs(
         )
 
 
-@router.post("/api/extensions/{service_id}/install")
-def install_extension(service_id: str, api_key: str = Depends(verify_api_key)):
-    """Install an extension from the library."""
-    _validate_service_id(service_id)
-    _assert_not_core(service_id)
+def _install_from_library(service_id: str) -> None:
+    """Copy an extension from the library to USER_EXTENSIONS_DIR atomically.
 
+    Must be called inside _extensions_lock() by the caller. Performs the
+    library path check, size check, and atomic stage+rename. Does NOT call
+    hooks or start the container — that's the caller's responsibility.
+
+    Raises HTTPException on failure.
+    """
     # Verify library is accessible
     try:
         lib_available = EXTENSIONS_LIBRARY_DIR.is_dir()
@@ -796,16 +799,17 @@ def install_extension(service_id: str, api_key: str = Depends(verify_api_key)):
 
     dest = USER_EXTENSIONS_DIR / service_id
 
-    # Early check (non-authoritative, rechecked under lock)
+    # Re-check under lock to prevent double-install race
     if dest.exists():
         has_compose = (dest / "compose.yaml").exists()
         has_disabled = (dest / "compose.yaml.disabled").exists()
         if has_compose or has_disabled:
             raise HTTPException(
-                status_code=409, detail=f"Extension already installed: {service_id}",
+                status_code=409,
+                detail=f"Extension already installed: {service_id}",
             )
         # Broken directory (no compose file) — clean up before reinstall
-        logger.warning("Cleaning up broken extension directory: %s", dest)
+        logger.warning("Cleaning up broken extension directory under lock: %s", dest)
         shutil.rmtree(dest)
 
     # Size check
@@ -819,39 +823,49 @@ def install_extension(service_id: str, api_key: str = Depends(verify_api_key)):
                     detail="Extension exceeds maximum size of 50MB",
                 )
 
+    USER_EXTENSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    tmpdir = tempfile.mkdtemp(dir=str(USER_EXTENSIONS_DIR.parent))
+    try:
+        staged = Path(tmpdir) / service_id
+        _copytree_safe(source, staged)
+        # Security scan the staged copy (prevents TOCTOU)
+        staged_compose = staged / "compose.yaml"
+        if staged_compose.exists():
+            _scan_compose_content(staged_compose, trusted=True)
+        os.rename(str(staged), str(dest))
+    finally:
+        if Path(tmpdir).exists():
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@router.post("/api/extensions/{service_id}/install")
+def install_extension(service_id: str, api_key: str = Depends(verify_api_key)):
+    """Install an extension from the library."""
+    _validate_service_id(service_id)
+    _assert_not_core(service_id)
+
+    dest = USER_EXTENSIONS_DIR / service_id
+
+    # Early check (non-authoritative, rechecked under lock in _install_from_library)
+    if dest.exists():
+        has_compose = (dest / "compose.yaml").exists()
+        has_disabled = (dest / "compose.yaml.disabled").exists()
+        if has_compose or has_disabled:
+            raise HTTPException(
+                status_code=409, detail=f"Extension already installed: {service_id}",
+            )
+        # Broken directory (no compose file) — clean up before reinstall
+        logger.warning("Cleaning up broken extension directory: %s", dest)
+        shutil.rmtree(dest)
+
     # NOTE: pre_install hook is deferred to a future version. On fresh library
     # installs, the extension directory doesn't exist yet, so the host agent
     # cannot resolve the hook script. The call site is intentionally omitted
     # until the install flow can read manifests from the library source.
 
-    # Atomic install via temp directory on same filesystem
+    # Atomic install via shared helper (used by templates too)
     with _extensions_lock():
-        # Re-check under lock to prevent double-install race
-        if dest.exists():
-            has_compose = (dest / "compose.yaml").exists()
-            has_disabled = (dest / "compose.yaml.disabled").exists()
-            if has_compose or has_disabled:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Extension already installed: {service_id}",
-                )
-            # Broken directory (no compose file) — clean up before reinstall
-            logger.warning("Cleaning up broken extension directory under lock: %s", dest)
-            shutil.rmtree(dest)
-
-        USER_EXTENSIONS_DIR.mkdir(parents=True, exist_ok=True)
-        tmpdir = tempfile.mkdtemp(dir=str(USER_EXTENSIONS_DIR.parent))
-        try:
-            staged = Path(tmpdir) / service_id
-            _copytree_safe(source, staged)
-            # Security scan the staged copy (prevents TOCTOU)
-            staged_compose = staged / "compose.yaml"
-            if staged_compose.exists():
-                _scan_compose_content(staged_compose, trusted=True)
-            os.rename(str(staged), str(dest))
-        finally:
-            if Path(tmpdir).exists():
-                shutil.rmtree(tmpdir, ignore_errors=True)
+        _install_from_library(service_id)
 
     # Write initial progress file so status shows "installing" immediately
     # (before host agent starts processing — closes the race window)

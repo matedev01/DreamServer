@@ -131,6 +131,7 @@ def load_extension_manifests(
                     "category": service.get("category", "optional"),
                     "setup_hook": service.get("setup_hook", ""),
                     "hooks": service.get("hooks", {}),
+                    "gpu_backends": service.get("gpu_backends", []),
                     **({"type": service["type"]} if "type" in service else {}),
                     **({"health_port": int(service["health_port"])} if "health_port" in service else {}),
                 }
@@ -300,3 +301,62 @@ DASHBOARD_API_KEY = os.environ.get("DASHBOARD_API_KEY", "")
 # Prefer dedicated DREAM_AGENT_KEY; fall back to DASHBOARD_API_KEY for
 # existing installs that haven't generated a separate key yet.
 DREAM_AGENT_KEY = os.environ.get("DREAM_AGENT_KEY", "") or DASHBOARD_API_KEY
+
+
+# --- Templates ---
+
+TEMPLATES_DIR = Path(
+    os.environ.get(
+        "DREAM_TEMPLATES_DIR",
+        str(Path(INSTALL_DIR) / "templates")
+    )
+)
+
+_TEMPLATE_SCHEMA = None
+try:
+    import jsonschema as _jsonschema_mod
+    _schema_path = Path(__file__).parent.parent.parent / "schema" / "service-template.v1.json"
+    if _schema_path.exists():
+        _TEMPLATE_SCHEMA = json.loads(_schema_path.read_text(encoding="utf-8"))
+except ImportError:
+    _jsonschema_mod = None
+
+
+def load_templates() -> list[dict]:
+    """Load service templates from YAML files. Returns empty list on failure."""
+    if not TEMPLATES_DIR.exists():
+        logger.info("Templates directory not found at %s", TEMPLATES_DIR)
+        return []
+
+    templates = []
+    for path in sorted(TEMPLATES_DIR.iterdir()):
+        if path.suffix.lower() not in (".yaml", ".yml"):
+            continue
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                logger.warning("Skipping template %s: root is not a mapping", path.name)
+                continue
+            if data.get("schema_version") != "dream.templates.v1":
+                logger.warning("Skipping template %s: unsupported schema_version", path.name)
+                continue
+            # Validate against JSON Schema if available
+            if _TEMPLATE_SCHEMA is not None and _jsonschema_mod is not None:
+                try:
+                    _jsonschema_mod.validate(data, _TEMPLATE_SCHEMA)
+                except _jsonschema_mod.ValidationError as ve:
+                    logger.warning("Template validation failed for %s: %s", path.name, ve.message)
+                    continue
+            template = data.get("template")
+            if not isinstance(template, dict) or not template.get("id") or not template.get("services"):
+                logger.warning("Skipping template %s: missing required fields", path.name)
+                continue
+            templates.append(template)
+        except (yaml.YAMLError, OSError, ValueError) as e:
+            logger.warning("Failed loading template %s: %s", path.name, e)
+
+    logger.info("Loaded %d service templates", len(templates))
+    return templates
+
+
+TEMPLATES = load_templates()

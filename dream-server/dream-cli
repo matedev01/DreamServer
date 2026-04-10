@@ -2884,6 +2884,178 @@ cmd_repair() {
     log "Run 'dream doctor' to diagnose issues, then check the output for suggested fixes."
 }
 
+#=============================================================================
+# Templates
+#=============================================================================
+_template_list() {
+    local templates_dir="$INSTALL_DIR/templates"
+    if [[ ! -d "$templates_dir" ]]; then
+        warn "No templates directory found at $templates_dir"
+        return 0
+    fi
+
+    local found=0
+    printf "${CYAN}%-20s %-30s %-6s %s${NC}\n" "ID" "NAME" "TIER" "SERVICES"
+    printf "%-20s %-30s %-6s %s\n" "----" "----" "----" "--------"
+
+    for f in "$templates_dir"/*.yaml "$templates_dir"/*.yml; do
+        [[ -f "$f" ]] || continue
+        local info
+        info=$(python3 - "$f" <<'PYEOF'
+import yaml, sys
+with open(sys.argv[1]) as fh:
+    d = yaml.safe_load(fh)
+if not isinstance(d, dict) or d.get("schema_version") != "dream.templates.v1":
+    sys.exit(0)
+t = d.get("template", {})
+tid = t.get("id", "")
+name = t.get("name", "")
+tier = t.get("tier_minimum", "-")
+svcs = ", ".join(t.get("services", []))
+if tid:
+    print(f"{tid}\t{name}\t{tier}\t{svcs}")
+PYEOF
+        ) || continue
+        [[ -z "$info" ]] && continue
+        IFS=$'\t' read -r tid tname ttier tsvcs <<< "$info"
+        printf "%-20s %-30s %-6s %s\n" "$tid" "$tname" "$ttier" "$tsvcs"
+        found=1
+    done
+
+    if [[ "$found" -eq 0 ]]; then
+        log "No templates found."
+    fi
+}
+
+_template_preview() {
+    local template_id="${1:-}"
+    [[ -z "$template_id" ]] && { log "Usage: dream template preview <template-id>"; exit 1; }
+
+    local templates_dir="$INSTALL_DIR/templates"
+    local tmpl_file=""
+    for f in "$templates_dir"/*.yaml "$templates_dir"/*.yml; do
+        [[ -f "$f" ]] || continue
+        local tid
+        tid=$(python3 - "$f" <<'PYEOF'
+import yaml, sys
+with open(sys.argv[1]) as fh:
+    d = yaml.safe_load(fh)
+if not isinstance(d, dict) or d.get("schema_version") != "dream.templates.v1":
+    sys.exit(0)
+t = d.get("template", {})
+print(t.get("id", ""))
+PYEOF
+        ) || continue
+        if [[ "$tid" == "$template_id" ]]; then
+            tmpl_file="$f"
+            break
+        fi
+    done
+
+    [[ -z "$tmpl_file" ]] && error "Template not found: $template_id"
+
+    python3 - "$tmpl_file" "$INSTALL_DIR" <<'PYEOF'
+import yaml, sys
+from pathlib import Path
+
+with open(sys.argv[1]) as fh:
+    d = yaml.safe_load(fh)
+t = d.get("template", {})
+install_dir = Path(sys.argv[2])
+
+print(f"Template: {t.get('name', t.get('id', ''))}")
+print(f"Description: {t.get('description', '-')}")
+if t.get("estimated_disk_gb"):
+    print(f"Estimated disk: ~{t['estimated_disk_gb']}GB")
+print()
+
+services = t.get("services", [])
+ext_dir = install_dir / "extensions" / "services"
+user_ext_dir = install_dir / "data" / "user-extensions"
+
+to_enable = []
+already = []
+for svc in services:
+    cf = ext_dir / svc / "compose.yaml"
+    ucf = user_ext_dir / svc / "compose.yaml"
+    if cf.exists() or ucf.exists():
+        already.append(svc)
+    else:
+        to_enable.append(svc)
+
+if already:
+    print(f"Already enabled: {', '.join(already)}")
+if to_enable:
+    print(f"Will enable:     {', '.join(to_enable)}")
+if not to_enable:
+    print("Nothing to change — all services already enabled.")
+PYEOF
+}
+
+_template_apply() {
+    local template_id="${1:-}"
+    [[ -z "$template_id" ]] && { log "Usage: dream template apply <template-id>"; exit 1; }
+
+    local templates_dir="$INSTALL_DIR/templates"
+    local services
+    services=$(python3 - "$templates_dir" "$template_id" <<'PYEOF'
+import yaml, sys
+from pathlib import Path
+
+templates_dir = Path(sys.argv[1])
+target_id = sys.argv[2]
+
+for f in sorted(templates_dir.glob("*.yaml")) + sorted(templates_dir.glob("*.yml")):
+    with open(f) as fh:
+        d = yaml.safe_load(fh)
+    if not isinstance(d, dict) or d.get("schema_version") != "dream.templates.v1":
+        continue
+    t = d.get("template", {})
+    if t.get("id") == target_id:
+        print(" ".join(t.get("services", [])))
+        sys.exit(0)
+
+print("", file=sys.stderr)
+sys.exit(1)
+PYEOF
+    ) || error "Template not found: $template_id"
+
+    [[ -z "$services" ]] && { warn "Template has no services."; return 0; }
+
+    log "Applying template: $template_id"
+    local svc
+    for svc in $services; do
+        # Skip core services (no compose toggle needed)
+        local cat="${SERVICE_CATEGORIES[$svc]:-optional}"
+        [[ "$cat" == "core" ]] && continue
+
+        local cf="$INSTALL_DIR/extensions/services/$svc/compose.yaml"
+        local ucf="$INSTALL_DIR/data/user-extensions/$svc/compose.yaml"
+        if [[ -f "$cf" || -f "$ucf" ]]; then
+            log "  $svc — already enabled"
+            continue
+        fi
+
+        log "  Enabling $svc..."
+        cmd_enable "$svc" || warn "  Failed to enable $svc (continuing)"
+    done
+    success "Template applied: $template_id"
+}
+
+cmd_template() {
+    check_install
+    sr_load
+    load_env 2>/dev/null || true
+    local subcmd="${1:-list}"
+    shift || true
+    case "$subcmd" in
+        list)    _template_list ;;
+        preview) _template_preview "$@" ;;
+        apply)   _template_apply "$@" ;;
+        *)       log "Usage: dream template [list|preview|apply] [template-id]"; exit 1 ;;
+    esac
+}
+
 cmd_help() {
     sr_load
     cat << EOF
@@ -2921,6 +3093,7 @@ ${CYAN}Commands:${NC}
   benchmark           Run a quick performance test
   doctor [report]     Run diagnostics and write JSON report
   repair|fix          Run basic repairs (currently redirects to doctor)
+  template [action]   Apply pre-built service templates (list|preview|apply)
   audit [extensions]  Audit extension manifests and compose contracts
   agent [action]      Manage dream host agent (status|start|stop|restart|logs)
   help                Show this help
@@ -2995,6 +3168,11 @@ ${CYAN}Examples:${NC}
   dream restart stt               # Restart Whisper (via alias)
   dream chat "What is 2+2?"      # Quick LLM test
   dream config edit               # Edit .env file
+  dream template list              # List available templates
+  dream template preview creative-studio
+                                  # Preview what a template will change
+  dream template apply chat-playground
+                                  # Apply a template (enables services)
   dream audit                     # Audit every extension contract
   dream audit --json whisper      # Audit one service as JSON
   dream agent status              # Check host agent health
@@ -3035,6 +3213,7 @@ case "${1:-help}" in
     benchmark|bench|b) cmd_benchmark ;;
     doctor|diag|d) shift; cmd_doctor "$@" ;;
     audit)        shift; cmd_audit "$@" ;;
+    template|tmpl) shift; cmd_template "$@" ;;
     agent)        shift; cmd_agent "$@" ;;
     help|h|--help|-h) cmd_help ;;
     version|v|--version|-v) echo "dream-cli v${VERSION}" ;;

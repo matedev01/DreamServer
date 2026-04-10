@@ -5,6 +5,32 @@ import {
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { DependencyBadges, DependencyConfirmDialog, DisableDependentWarning } from '../components/DependencyBadges'
+import { TemplatePicker } from '../components/TemplatePicker'
+
+// Services defined in docker-compose.base.yml — always running, not togglable via templates
+const BASE_COMPOSE_SERVICES = new Set(['llama-server', 'open-webui', 'dashboard', 'dashboard-api'])
+
+// Compute template status from catalog extensions data.
+// Returns one of: 'available', 'in_progress', 'applied', 'has_errors'
+// Precedence: has_errors > in_progress > applied > available
+export function getTemplateStatus(template, extensions) {
+  const services = template.services || []
+  const serviceStatus = {}
+  for (const svcId of services) {
+    if (BASE_COMPOSE_SERVICES.has(svcId)) {
+      serviceStatus[svcId] = 'enabled'
+      continue
+    }
+    const ext = extensions.find(e => e.id === svcId)
+    serviceStatus[svcId] = ext ? ext.status : undefined
+  }
+  const statuses = Object.values(serviceStatus)
+  if (statuses.some(s => s === 'error')) return 'has_errors'
+  if (statuses.some(s => s === 'installing' || s === 'setting_up')) return 'in_progress'
+  const allEnabled = statuses.every(s => s === 'enabled')
+  if (allEnabled) return 'applied'
+  return 'available'
+}
 
 // Auth: nginx injects "Authorization: Bearer ${DASHBOARD_API_KEY}" via
 // proxy_set_header for all /api/ requests (see nginx.conf).  All fetches
@@ -73,6 +99,8 @@ export default function Extensions() {
   const [refreshing, setRefreshing] = useState(false)
   const [progressMap, setProgressMap] = useState({})
   const [depConfirm, setDepConfirm] = useState(null)
+  const [templates, setTemplates] = useState([])
+  const [templatesOpen, setTemplatesOpen] = useState(false)
   const installProgressRef = useRef(null)
   const activePollers = useRef({})
 
@@ -113,6 +141,10 @@ export default function Extensions() {
 
   useEffect(() => {
     fetchCatalog()
+    fetch('/api/templates')
+      .then(r => r.ok ? r.json() : { templates: [] })
+      .then(d => setTemplates(d.templates || []))
+      .catch(() => {})
     return () => { Object.values(activePollers.current).forEach(clearInterval); activePollers.current = {} }
   }, [])
 
@@ -370,6 +402,22 @@ export default function Extensions() {
       )}
 
       {/* Card grid */}
+      {(() => {
+        const enrichedTemplates = templates
+          .map(t => ({ ...t, _status: getTemplateStatus(t, extensions) }))
+          .filter(t => t._status !== 'applied')
+        if (enrichedTemplates.length === 0) return null
+        return (
+          <div className="mb-4">
+            <button onClick={() => setTemplatesOpen(!templatesOpen)} className="flex items-center gap-2 text-sm text-theme-text-muted hover:text-theme-text transition-colors mb-2">
+              {templatesOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              Quick Start Templates ({enrichedTemplates.length})
+            </button>
+            {templatesOpen && <TemplatePicker templates={enrichedTemplates} onApplied={fetchCatalog} />}
+          </div>
+        )
+      })()}
+
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-theme-text-muted">
           <Package size={48} className="mb-4 opacity-40" />

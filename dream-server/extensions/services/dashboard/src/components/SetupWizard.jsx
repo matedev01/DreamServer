@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { CheckCircle, Circle, ChevronRight, ChevronLeft, Mic, User, Settings, Play, Shield } from 'lucide-react'
+import { CheckCircle, Circle, ChevronRight, ChevronLeft, Mic, User, Settings, Play, Shield, Layers } from 'lucide-react'
 import { PreFlightChecks } from './PreFlightChecks'
+import { TemplatePicker } from './TemplatePicker'
 
 export default function SetupWizard({ onComplete }) {
   const [step, setStep] = useState(1)
@@ -12,7 +13,15 @@ export default function SetupWizard({ onComplete }) {
   })
   const [testStatus, setTestStatus] = useState({ running: false, output: [], done: false, success: false })
   const [preflightIssues, setPreflightIssues] = useState([])
-  const totalSteps = 5
+  const [templates, setTemplates] = useState([])
+  const totalSteps = 6
+
+  useEffect(() => {
+    fetch('/api/templates')
+      .then(res => res.ok ? res.json() : { templates: [] })
+      .then(data => setTemplates(data.templates || []))
+      .catch(() => {})
+  }, [])
 
   const voices = [
     { id: 'af_heart', name: 'Heart', desc: 'Warm, friendly female' },
@@ -66,7 +75,7 @@ export default function SetupWizard({ onComplete }) {
         <div className="flex-1 flex flex-col justify-center p-8">
           {/* Step Indicator */}
           <div className="flex items-center justify-center gap-2 mb-8">
-            {[1, 2, 3, 4, 5].map(i => (
+            {[1, 2, 3, 4, 5, 6].map(i => (
               <div key={i} className="flex items-center">
                 {i < step ? (
                   <CheckCircle className="w-6 h-6 text-green-500" />
@@ -75,7 +84,7 @@ export default function SetupWizard({ onComplete }) {
                 ) : (
                   <Circle className="w-6 h-6 text-theme-text-muted" />
                 )}
-                {i < 5 && <div className={`w-8 h-0.5 mx-1 ${i < step ? 'bg-green-500' : 'bg-theme-border'}`} />}
+                {i < 6 && <div className={`w-8 h-0.5 mx-1 ${i < step ? 'bg-green-500' : 'bg-theme-border'}`} />}
               </div>
             ))}
           </div>
@@ -97,8 +106,26 @@ export default function SetupWizard({ onComplete }) {
             </div>
           )}
 
-          {/* Step 2: Welcome */}
+          {/* Step 2: Templates (optional) */}
           {step === 2 && (
+            <div className="text-center max-w-2xl mx-auto">
+              <div className="w-20 h-20 bg-theme-accent/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Layers className="w-10 h-10 text-theme-accent" />
+              </div>
+              <h2 className="text-3xl font-bold text-theme-text mb-4">Choose a Template</h2>
+              <p className="text-theme-text-secondary mb-8">
+                Pick a pre-configured set of services to get started quickly, or skip to customize later.
+              </p>
+              {templates.length > 0 ? (
+                <TemplatePicker templates={templates} compact />
+              ) : (
+                <p className="text-sm text-theme-text-muted">No templates available.</p>
+              )}
+            </div>
+          )}
+
+          {/* Step 3: Welcome */}
+          {step === 3 && (
             <div className="text-center max-w-lg mx-auto">
               <div className="w-20 h-20 bg-theme-accent/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
                 <Settings className="w-10 h-10 text-theme-accent" />
@@ -125,8 +152,8 @@ export default function SetupWizard({ onComplete }) {
             </div>
           )}
 
-          {/* Step 3: Name */}
-          {step === 3 && (
+          {/* Step 4: Name */}
+          {step === 4 && (
             <div className="text-center max-w-md mx-auto">
               <div className="w-20 h-20 bg-purple-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
                 <User className="w-10 h-10 text-purple-400" />
@@ -146,8 +173,8 @@ export default function SetupWizard({ onComplete }) {
             </div>
           )}
 
-          {/* Step 4: Voice */}
-          {step === 4 && (
+          {/* Step 5: Voice */}
+          {step === 5 && (
             <div className="text-center max-w-lg mx-auto">
               <div className="w-20 h-20 bg-pink-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
                 <Mic className="w-10 h-10 text-pink-400" />
@@ -182,8 +209,8 @@ export default function SetupWizard({ onComplete }) {
             </div>
           )}
 
-          {/* Step 5: Diagnostics */}
-          {step === 5 && (
+          {/* Step 6: Diagnostics */}
+          {step === 6 && (
             <div className="text-center max-w-2xl mx-auto">
               <div className="w-20 h-20 bg-green-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
                 <Play className="w-10 h-10 text-green-400" />
@@ -238,7 +265,7 @@ export default function SetupWizard({ onComplete }) {
             {step < totalSteps ? (
               <button
                 onClick={() => setStep(s => s + 1)}
-                disabled={step === 3 && !config.userName.trim()}
+                disabled={step === 4 && !config.userName.trim()}
                 className="flex items-center gap-2 px-6 py-2 bg-theme-accent hover:bg-theme-accent-hover disabled:bg-zinc-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
               >
                 Next
