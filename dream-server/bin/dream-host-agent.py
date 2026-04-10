@@ -1138,10 +1138,18 @@ def _recreate_llama_server(env: dict):
     if restart.get("Name"):
         run_cmd += ["--restart", restart["Name"]]
 
-    # Network
+    # Network + aliases (compose sets service name as alias, e.g. "llama-server")
+    # Other containers (LiteLLM, Open WebUI) reference "llama-server" by
+    # the compose service name, so we must preserve it as a network alias.
     networks = config.get("NetworkSettings", {}).get("Networks", {})
-    for net_name in networks:
+    for net_name, net_cfg in networks.items():
         run_cmd += ["--network", net_name]
+        # Restore aliases from the compose config
+        for alias in (net_cfg.get("Aliases") or []):
+            if alias != container and alias != config["Config"].get("Hostname", ""):
+                run_cmd += ["--network-alias", alias]
+        # Always ensure the compose service name is an alias
+        run_cmd += ["--network-alias", "llama-server"]
         break  # Use the first network
 
     # Ports
