@@ -81,7 +81,7 @@ export function useDownloadProgress(pollIntervalMs = 1000) {
       await fetch('/api/models/download/cancel', { method: 'POST' })
       fetchProgress()
     } catch (err) {
-      // Silently fail
+      console.error('Failed to cancel download:', err)
     }
   }, [fetchProgress])
 
