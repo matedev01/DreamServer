@@ -158,7 +158,7 @@ async def get_loaded_model() -> Optional[str]:
                 return m.get("id")
         if models:
             return models[0].get("id")
-    except (httpx.HTTPError, httpx.TimeoutException) as e:
+    except (httpx.HTTPError, httpx.TimeoutException, ValueError) as e:
         logger.debug("get_loaded_model failed: %s", e)
     return None
 
