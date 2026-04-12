@@ -83,17 +83,31 @@ else
     echo "  Note: This requires sudo access and may take several minutes"
 fi
 
-# GPU check (early warning)
-if command -v nvidia-smi &> /dev/null; then
-    GPU_INFO=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1)
-    if [[ -n "$GPU_INFO" ]]; then
-        success "NVIDIA GPU detected: $GPU_INFO"
-    else
-        warn "nvidia-smi found but no GPU detected"
-    fi
-else
-    warn "No nvidia-smi — GPU features will be limited"
-    echo "  For full functionality, install NVIDIA drivers"
+# GPU check (early info — real detection happens in the installer)
+_gpu_found=false
+for _v in /sys/class/drm/card*/device/vendor; do
+    case "$(cat "$_v" 2>/dev/null)" in
+        0x10de) # NVIDIA
+            if command -v nvidia-smi &> /dev/null; then
+                _info=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1)
+                [[ -n "$_info" ]] && success "NVIDIA GPU detected: $_info" && _gpu_found=true
+            else
+                success "NVIDIA GPU detected (driver not yet installed — installer will handle it)"
+                _gpu_found=true
+            fi ;;
+        0x1002) # AMD
+            success "AMD GPU detected"
+            _gpu_found=true ;;
+        0x8086) # Intel — only flag if it looks like Arc (discrete)
+            if lspci 2>/dev/null | grep -qi 'VGA.*Intel.*Arc'; then
+                success "Intel Arc GPU detected"
+                _gpu_found=true
+            fi ;;
+    esac
+    $_gpu_found && break
+done
+if ! $_gpu_found; then
+    warn "No GPU detected — CPU-only mode will be used (slow but functional)"
 fi
 
 # git
@@ -149,29 +163,7 @@ else
     error "Docker Compose is required but not found.\n\nInstall Docker Compose:\n  https://docs.docker.com/compose/install/\n\nAfter installing, re-run this script."
 fi
 
-# NVIDIA GPU check (for Linux/WSL only)
-if [[ "$OS" == "linux" || "$OS" == "wsl" ]]; then
-    log "Checking NVIDIA GPU..."
-    if command -v nvidia-smi &> /dev/null; then
-        GPU_INFO=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1)
-        if [[ -n "$GPU_INFO" ]]; then
-            success "NVIDIA GPU detected: $GPU_INFO"
-            # Extract VRAM in MB and check minimum
-            VRAM_MB=$(echo "$GPU_INFO" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) MiB.*/\1/p')
-            VRAM_MB=${VRAM_MB:-0}
-            if [[ "$VRAM_MB" -lt 8192 ]]; then
-                warn "GPU has less than 8GB VRAM. Some models may not fit."
-                echo "  Consider using a smaller model (7B) or cloud fallback."
-            fi
-        else
-            warn "nvidia-smi found but no GPU detected. GPU containers may fail."
-        fi
-    else
-        warn "nvidia-smi not found. GPU support may not be available."
-        echo "  For GPU support, install NVIDIA drivers: https://www.nvidia.com/drivers"
-        echo "  CPU-only mode will be slow but functional for small models."
-    fi
-fi
+# GPU pre-check already done above — real detection happens in the installer
 
 # ── Check for existing installation ──────────────────
 if [[ -d "$INSTALL_DIR" ]]; then
