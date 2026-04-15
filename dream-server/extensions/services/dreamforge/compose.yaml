@@ -34,7 +34,7 @@ services:
       - ./data/dreamforge:/data/dreamforge
       - ${DREAMFORGE_HOST_WORKSPACE:-./workspace}:/workspace
     ports:
-      - "127.0.0.1:${DREAMFORGE_PORT:-3010}:3010"
+      - "${BIND_ADDRESS:-127.0.0.1}:${DREAMFORGE_PORT:-3010}:3010"
     deploy:
       resources:
         limits:

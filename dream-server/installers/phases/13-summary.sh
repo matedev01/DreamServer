@@ -337,7 +337,13 @@ systemctl --user is-active opencode-web &>/dev/null && \
 echo -e "  ${BGRN}OpenCode${NC}     ${WHT}http://localhost:3003${NC}"
 echo ""
 if [[ -n "$LOCAL_IP" ]]; then
-echo -e "  ${AMB}On your network:${NC}  ${WHT}http://${LOCAL_IP}:${DASHBOARD_PORT}${NC}"
+    _bind=$(grep "^BIND_ADDRESS=" "$INSTALL_DIR/.env" 2>/dev/null | cut -d= -f2- | tr -d '"' || echo "127.0.0.1")
+    [[ -z "$_bind" ]] && _bind="127.0.0.1"
+    if [[ "$_bind" == "0.0.0.0" ]]; then
+        echo -e "  ${AMB}On your network:${NC}  ${WHT}http://${LOCAL_IP}:${DASHBOARD_PORT}${NC}"
+    else
+        echo -e "  ${AMB}LAN access:${NC}      ${DIM}Reinstall with --lan or set BIND_ADDRESS=0.0.0.0 in .env${NC}"
+    fi
 fi
 echo ""
 echo -e "  Start here → ${WHT}http://localhost:${DASHBOARD_PORT}${NC}"

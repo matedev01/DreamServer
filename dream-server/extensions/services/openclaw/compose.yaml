@@ -27,7 +27,7 @@ services:
       - openclaw-home:/home/node/.openclaw
       - ./config/openclaw/workspace:/home/node/.openclaw/workspace
     ports:
-      - "127.0.0.1:${OPENCLAW_PORT:-7860}:18789"
+      - "${BIND_ADDRESS:-127.0.0.1}:${OPENCLAW_PORT:-7860}:18789"
     deploy:
       resources:
         limits:

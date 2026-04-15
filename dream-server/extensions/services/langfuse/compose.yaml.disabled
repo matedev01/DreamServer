@@ -38,7 +38,7 @@ services:
       LANGFUSE_INIT_USER_NAME: "DreamServer Admin"
       LANGFUSE_INIT_USER_PASSWORD: "${LANGFUSE_INIT_USER_PASSWORD}"
     ports:
-      - "127.0.0.1:${LANGFUSE_PORT:-3006}:3000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${LANGFUSE_PORT:-3006}:3000"
     networks:
       - default
       - langfuse-internal

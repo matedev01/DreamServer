@@ -171,7 +171,14 @@ show_success_card() {
     echo ""
     echo -e "       ${DGRN}Chat UI:${NC}    ${WHT}http://localhost:${webui_port}${NC}"
     echo -e "       ${DGRN}Dashboard:${NC}  ${WHT}http://localhost:${dashboard_port}${NC}"
-    echo -e "       ${DGRN}Network:${NC}    ${WHT}http://${local_ip}:${webui_port}${NC}"
+    local _bind
+    _bind=$(grep "^BIND_ADDRESS=" "$DS_INSTALL_DIR/.env" 2>/dev/null | cut -d= -f2- | tr -d '"' || echo "127.0.0.1")
+    [[ -z "$_bind" ]] && _bind="127.0.0.1"
+    if [[ "$_bind" == "0.0.0.0" ]]; then
+        echo -e "       ${DGRN}Network:${NC}    ${WHT}http://${local_ip}:${webui_port}${NC}"
+    else
+        echo -e "       ${DGRN}LAN access:${NC} ${DIM}Set BIND_ADDRESS=0.0.0.0 in .env${NC}"
+    fi
     echo ""
     echo -e "       ${DGRN}Manage:${NC}     ${GRN}./dream-macos.sh status${NC}"
     echo -e "       ${DGRN}Logs:${NC}       ${GRN}./dream-macos.sh logs llama-server${NC}"

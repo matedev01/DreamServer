@@ -14,6 +14,7 @@ param(
     [switch]$Cloud,
     [switch]$Comfyui,
     [switch]$NoComfyui,
+    [switch]$Lan,
     [string]$SummaryJsonPath = ""
 )
 

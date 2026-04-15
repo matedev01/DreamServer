@@ -105,6 +105,7 @@ INTERACTIVE=true
 DREAM_MODE="${DREAM_MODE:-local}"
 OFFLINE_MODE=false   # M1 integration: fully air-gapped operation
 NO_BOOTSTRAP=false  # Skip bootstrap fast-start, download full model in foreground
+BIND_ADDRESS="${BIND_ADDRESS:-127.0.0.1}"
 SUMMARY_JSON_FILE="${SUMMARY_JSON_FILE:-}"
 
 usage() {
@@ -132,6 +133,7 @@ Options:
     --all             Enable all optional services (including Langfuse)
     --non-interactive Run without prompts (use defaults or flags)
     --offline         M1 mode: Configure for fully offline/air-gapped operation
+    --lan             Bind services to 0.0.0.0 for LAN access (headless servers)
     --no-bootstrap    Skip bootstrap fast-start (download full model in foreground)
     --summary-json P  Write machine-readable install summary JSON to path P
     -h, --help        Show this help
@@ -180,6 +182,7 @@ while [[ $# -gt 0 ]]; do
         --all) ENABLE_VOICE=true; ENABLE_WORKFLOWS=true; ENABLE_RAG=true; ENABLE_OPENCLAW=true; ENABLE_COMFYUI=true; ENABLE_DREAMFORGE=true; ENABLE_LANGFUSE=true; shift ;;
         --non-interactive) INTERACTIVE=false; shift ;;
         --offline) OFFLINE_MODE=true; shift ;;
+        --lan) BIND_ADDRESS="0.0.0.0"; shift ;;
         --no-bootstrap) NO_BOOTSTRAP=true; shift ;;
         --summary-json) SUMMARY_JSON_FILE="$2"; shift 2 ;;
         -h|--help) usage ;;

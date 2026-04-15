@@ -125,7 +125,8 @@ $envResult = New-DreamEnv `
     -GpuBackend     $gpuInfo.Backend `
     -DreamMode      $_dreamMode `
     -LlamaServerImage $llamaServerImage `
-    -EnableLangfuse $enableLangfuse
+    -EnableLangfuse $enableLangfuse `
+    -EnableLan      $lanFlag
 Write-AISuccess "Generated .env with secure secrets"
 
 # ── Post-generation validation: verify all required keys are present with values ──

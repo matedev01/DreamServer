@@ -246,6 +246,9 @@ Fix with: sudo chown -R \$(id -u):\$(id -g) $INSTALL_DIR/config $INSTALL_DIR/dat
         LLAMA_CPU_RESERVATION="$LLAMA_CPU_LIMIT"
     fi
 
+    # Network binding (--lan sets 0.0.0.0; default is localhost-only)
+    BIND_ADDRESS=$(_env_get BIND_ADDRESS "${BIND_ADDRESS:-127.0.0.1}")
+
     # Preserve user-supplied cloud API keys
     ANTHROPIC_API_KEY=$(_env_get ANTHROPIC_API_KEY "${ANTHROPIC_API_KEY:-}")
     OPENAI_API_KEY=$(_env_get OPENAI_API_KEY "${OPENAI_API_KEY:-}")
@@ -265,6 +268,11 @@ Fix with: sudo chown -R \$(id -u):\$(id -g) $INSTALL_DIR/config $INSTALL_DIR/dat
 
 #=== Dream Server Version (used by dream-cli update for version-compat checks) ===
 DREAM_VERSION=${VERSION:-2.4.0}
+
+#=== Network Binding ===
+# 127.0.0.1 = localhost only (secure default)
+# 0.0.0.0   = accessible from LAN (install with --lan or set manually)
+BIND_ADDRESS=${BIND_ADDRESS}
 
 #=== LLM Backend Mode ===
 DREAM_MODE=$(if [[ "$GPU_BACKEND" == "amd" && "${DREAM_MODE:-local}" == "local" ]]; then echo "lemonade"; else echo "${DREAM_MODE:-local}"; fi)

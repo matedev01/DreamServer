@@ -253,8 +253,20 @@ function Write-SuccessCard {
     Write-Host "http://localhost:$WebUIPort" -ForegroundColor White
     Write-Host "       Dashboard:  " -ForegroundColor DarkGray -NoNewline
     Write-Host "http://localhost:$DashboardPort" -ForegroundColor White
-    Write-Host "       Network:    " -ForegroundColor DarkGray -NoNewline
-    Write-Host "http://${localIP}:$WebUIPort" -ForegroundColor White
+    $_bindAddr = ""
+    $_envPath = Join-Path $script:DS_INSTALL_DIR ".env"
+    if (Test-Path $_envPath) {
+        Get-Content $_envPath | ForEach-Object {
+            if ($_ -match "^BIND_ADDRESS=(.*)$") { $_bindAddr = $Matches[1].Trim() }
+        }
+    }
+    if ($_bindAddr -eq "0.0.0.0") {
+        Write-Host "       Network:    " -ForegroundColor DarkGray -NoNewline
+        Write-Host "http://${localIP}:$WebUIPort" -ForegroundColor White
+    } else {
+        Write-Host "       LAN access: " -ForegroundColor DarkGray -NoNewline
+        Write-Host "Set BIND_ADDRESS=0.0.0.0 in .env or reinstall with -Lan" -ForegroundColor DarkGray
+    }
     Write-Host ""
     Write-Host "       Manage:     " -ForegroundColor DarkGray -NoNewline
     Write-Host ".\dream.ps1 status" -ForegroundColor Cyan

@@ -14,7 +14,7 @@ services:
     volumes:
       - ./config/litellm/${DREAM_MODE:-local}.yaml:/app/config.yaml:ro
     ports:
-      - "127.0.0.1:${LITELLM_PORT:-4000}:4000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${LITELLM_PORT:-4000}:4000"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |

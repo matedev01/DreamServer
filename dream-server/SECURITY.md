@@ -54,13 +54,26 @@ docker compose down && docker compose up -d
 
 All services bind to `127.0.0.1` — accessible only from the local machine.
 
-### Exposing to LAN
+### Quick LAN Access
 
-For access from other devices on your network:
+For headless servers accessible from other machines on the same network:
 
 ```bash
-# Allow specific ports from local network
+./install.sh --lan
+```
+
+Or change `BIND_ADDRESS` to `0.0.0.0` in the Dashboard Settings tab, then restart:
+
+```bash
+dream restart
+```
+
+This binds all services to all network interfaces. Use firewall rules to
+restrict access to your local subnet:
+
+```bash
 sudo ufw allow from 192.168.0.0/24 to any port 3000  # WebUI
+sudo ufw allow from 192.168.0.0/24 to any port 3001  # Dashboard
 sudo ufw allow from 192.168.0.0/24 to any port 8080  # LLM API
 ```
 

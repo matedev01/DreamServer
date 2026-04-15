@@ -58,7 +58,7 @@ services:
 
     ports:
       # External port (user-facing) : Internal port (container)
-      - "127.0.0.1:${MY_SERVICE_PORT:-1234}:1234"
+      - "${BIND_ADDRESS:-127.0.0.1}:${MY_SERVICE_PORT:-1234}:1234"
 
     deploy:
       resources:
