@@ -163,8 +163,9 @@ dream_progress 95 "health" "Checking voice services"
 [[ "$ENABLE_VOICE" == "true" ]] && _check_health "Kokoro (TTS)" "http://localhost:${SERVICE_PORTS[tts]:-8880}${SERVICE_HEALTH[tts]:-/health}" 150 10
 
 # Pre-download the Whisper STT model so first transcription is instant.
-# Speaches lazy-downloads on first request, but that causes a long delay +
-# a 404 if the model isn't cached yet. Trigger the download now.
+# Speaches does NOT auto-download on transcription requests — it returns 404.
+# We must trigger the download explicitly here, verify it completed, and
+# surface a clear recovery command if anything fails.
 if [[ "$ENABLE_VOICE" == "true" ]]; then
     if [[ "$GPU_BACKEND" == "nvidia" ]]; then
         STT_MODEL="deepdml/faster-whisper-large-v3-turbo-ct2"
@@ -172,15 +173,43 @@ if [[ "$ENABLE_VOICE" == "true" ]]; then
         STT_MODEL="Systran/faster-whisper-base"
     fi
     STT_MODEL_ENCODED="${STT_MODEL//\//%2F}"
-    WHISPER_URL="http://localhost:${SERVICE_PORTS[whisper]:-9000}"
-    # Only download if model isn't already loaded
-    if ! curl -sf --max-time 10 "${WHISPER_URL}/v1/models/${STT_MODEL_ENCODED}" &>/dev/null; then
-        ai "Downloading STT model (${STT_MODEL})..."
-        curl -sf --max-time 3600 -X POST "${WHISPER_URL}/v1/models/${STT_MODEL_ENCODED}" >> "$LOG_FILE" 2>&1 && \
-            printf "\r  ${BGRN}✓${NC} %-60s\n" "STT model cached (${STT_MODEL})" || \
-            printf "\r  ${AMB}⚠${NC} %-60s\n" "STT model will download on first use"
-    else
+    WHISPER_PORT_RESOLVED="${SERVICE_PORTS[whisper]:-9000}"
+    WHISPER_URL="http://localhost:${WHISPER_PORT_RESOLVED}"
+    STT_RECOVERY_CMD="curl -X POST ${WHISPER_URL}/v1/models/${STT_MODEL_ENCODED}"
+
+    # Step 1: wait briefly for the models API to be ready. Whisper's /health
+    # endpoint can pass before the models endpoint responds, so we probe
+    # GET /v1/models with a short retry loop (max 15s total).
+    _stt_api_ready=false
+    for _i in $(seq 1 15); do
+        if curl -sf --max-time 2 "${WHISPER_URL}/v1/models" &>/dev/null; then
+            _stt_api_ready=true
+            break
+        fi
+        sleep 1
+    done
+
+    if ! $_stt_api_ready; then
+        printf "\r  ${AMB}⚠${NC} %-60s\n" "STT models API not ready — download manually:"
+        printf "      %s\n" "$STT_RECOVERY_CMD"
+    # Step 2: skip download if already cached.
+    elif curl -sf --max-time 10 "${WHISPER_URL}/v1/models/${STT_MODEL_ENCODED}" &>/dev/null; then
         printf "\r  ${BGRN}✓${NC} %-60s\n" "STT model already cached (${STT_MODEL})"
+    else
+        # Step 3: POST to trigger download. Log stdout/stderr to install log.
+        ai "Downloading STT model (${STT_MODEL})..."
+        curl -s --max-time 3600 -X POST "${WHISPER_URL}/v1/models/${STT_MODEL_ENCODED}" \
+            >> "$LOG_FILE" 2>&1
+
+        # Step 4: verify the model is actually cached. POST can return 200
+        # even if the download partially fails, so this GET is the real test.
+        if curl -sf --max-time 10 "${WHISPER_URL}/v1/models/${STT_MODEL_ENCODED}" &>/dev/null; then
+            printf "\r  ${BGRN}✓${NC} %-60s\n" "STT model cached (${STT_MODEL})"
+        else
+            printf "\r  ${AMB}⚠${NC} %-60s\n" "STT model download failed — run manually:"
+            printf "      %s\n" "$STT_RECOVERY_CMD"
+            printf "      %s\n" "See $LOG_FILE for details."
+        fi
     fi
 fi
 

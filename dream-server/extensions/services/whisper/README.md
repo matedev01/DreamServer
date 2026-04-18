@@ -61,7 +61,24 @@ VAD parameters injected:
 
 ## Data Persistence
 
-Downloaded models are cached in `data/whisper/` (mounted at `/home/ubuntu/.cache/huggingface/hub` inside the container). Models are downloaded automatically on first use.
+Downloaded models are cached in `data/whisper/` (mounted at `/home/ubuntu/.cache/huggingface/hub` inside the container).
+
+## Model Downloads
+
+**Important:** Speaches does NOT auto-download models on transcription requests — it returns `404 Model ... is not installed locally` if the model isn't already cached. The installer's Phase 12 (`installers/phases/12-health.sh`) pre-downloads the default STT model by triggering `POST /v1/models/{id}` against the service.
+
+If the pre-download fails (network issue, models API not ready in time), run the recovery command manually:
+
+```bash
+# For AMD / CPU / Intel (default: base model, ~130MB):
+curl -X POST http://localhost:9000/v1/models/Systran%2Ffaster-whisper-base
+
+# For NVIDIA (default: large-v3 turbo, ~1.5GB):
+curl -X POST http://localhost:9000/v1/models/deepdml%2Ffaster-whisper-large-v3-turbo-ct2
+
+# Wait 2-5 minutes (depending on model size + network). Verify it cached:
+curl http://localhost:9000/v1/models
+```
 
 ## Files
 
@@ -85,8 +102,9 @@ docker compose logs whisper
 - The patch targets a specific line in the speaches source; if the upstream image changes, the patch may be skipped silently
 - Check logs for `[dream-whisper] WARNING: Target pattern not found`
 
-**Model download hanging:**
-- Whisper downloads models from HuggingFace on first use; allow a few minutes
+**Model download failed during install / STT returns 404:**
+- Speaches does not auto-download on transcription — run the recovery `curl -X POST ...` command from the **Model Downloads** section above
+- Downloads come from HuggingFace; allow 2-5 minutes for the ~130MB base model (or ~1.5GB for NVIDIA turbo)
 - Check container logs: `docker compose logs -f whisper`
 
 **Open WebUI not using Whisper:**
