@@ -80,6 +80,35 @@ STATUSEOF
     mv "$STATUS_FILE.tmp" "$STATUS_FILE"
 }
 
+sync_windows_opencode_config() {
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) ;;
+        *) return 0 ;;
+    esac
+
+    local sync_script="$INSTALL_DIR/scripts/update-windows-opencode-config.ps1"
+    [[ -f "$sync_script" ]] || return 0
+
+    local ps_cmd=""
+    if command -v powershell.exe >/dev/null 2>&1; then
+        ps_cmd="powershell.exe"
+    elif command -v pwsh.exe >/dev/null 2>&1; then
+        ps_cmd="pwsh.exe"
+    fi
+    [[ -n "$ps_cmd" ]] || return 0
+
+    local install_dir_arg="$INSTALL_DIR"
+    local sync_script_arg="$sync_script"
+    if command -v cygpath >/dev/null 2>&1; then
+        install_dir_arg=$(cygpath -w "$INSTALL_DIR")
+        sync_script_arg=$(cygpath -w "$sync_script")
+    fi
+
+    log "Refreshing Windows OpenCode config for model: $FULL_GGUF_FILE"
+    "$ps_cmd" -NoProfile -ExecutionPolicy Bypass -File "$sync_script_arg" -InstallDir "$install_dir_arg" \
+        >/dev/null 2>&1 || log "WARNING: OpenCode config refresh failed (non-fatal)"
+}
+
 # Background monitor: polls .part file size every 2s
 monitor_download() {
     local part_file="$1" total_bytes="$2"
@@ -475,6 +504,7 @@ LITELLM_UPGRADE_EOF
                 log "WARNING: No compose args — cannot recreate OpenClaw. Restart manually."
             fi
         fi
+        sync_windows_opencode_config
     else
         log "WARNING: llama-server health check timed out. The model may still be loading."
         log "Check: docker logs dream-llama-server"

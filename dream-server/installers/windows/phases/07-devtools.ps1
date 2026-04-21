@@ -37,158 +37,7 @@ if ($dryRun) {
 }
 
 # ── OpenCode ──────────────────────────────────────────────────────────────────
-function Set-OpenCodeObjectProperty {
-    param(
-        [Parameter(Mandatory = $true)]
-        [object]$Target,
-        [Parameter(Mandatory = $true)]
-        [string]$Name,
-        $Value
-    )
-
-    $property = $Target.PSObject.Properties[$Name]
-    if ($property) {
-        $property.Value = $Value
-    } else {
-        $Target | Add-Member -NotePropertyName $Name -NotePropertyValue $Value
-    }
-}
-
-function New-WindowsOpenCodeConfigObject {
-    param(
-        [hashtable]$LlmEndpoint,
-        [string]$ModelId,
-        [string]$ModelName,
-        [int]$ContextLimit
-    )
-
-    return [pscustomobject]@{
-        '$schema' = "https://opencode.ai/config.json"
-        model = "llama-server/$ModelId"
-        small_model = "llama-server/$ModelId"
-        provider = [pscustomobject]@{
-            'llama-server' = [pscustomobject]@{
-                npm = "@ai-sdk/openai-compatible"
-                name = "llama-server (local)"
-                options = [pscustomobject]@{
-                    baseURL = $LlmEndpoint.BaseUrl
-                    apiKey = "no-key"
-                }
-                models = [pscustomobject]@{
-                    $ModelId = [pscustomobject]@{
-                        name = $ModelName
-                        limit = [pscustomobject]@{
-                            context = $ContextLimit
-                            output = 32768
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-function Update-WindowsOpenCodeConfigObject {
-    param(
-        [object]$Config,
-        [hashtable]$LlmEndpoint,
-        [string]$ModelId,
-        [string]$ModelName,
-        [int]$ContextLimit
-    )
-
-    if ($null -eq $Config) {
-        return New-WindowsOpenCodeConfigObject -LlmEndpoint $LlmEndpoint -ModelId $ModelId -ModelName $ModelName -ContextLimit $ContextLimit
-    }
-
-    Set-OpenCodeObjectProperty -Target $Config -Name '$schema' -Value "https://opencode.ai/config.json"
-    Set-OpenCodeObjectProperty -Target $Config -Name 'model' -Value "llama-server/$ModelId"
-    Set-OpenCodeObjectProperty -Target $Config -Name 'small_model' -Value "llama-server/$ModelId"
-
-    if (-not $Config.PSObject.Properties['provider'] -or $null -eq $Config.provider) {
-        Set-OpenCodeObjectProperty -Target $Config -Name 'provider' -Value ([pscustomobject]@{})
-    }
-    $provider = $Config.provider
-
-    if (-not $provider.PSObject.Properties['llama-server'] -or $null -eq $provider.'llama-server') {
-        Set-OpenCodeObjectProperty -Target $provider -Name 'llama-server' -Value ([pscustomobject]@{})
-    }
-    $llamaProvider = $provider.'llama-server'
-
-    Set-OpenCodeObjectProperty -Target $llamaProvider -Name 'npm' -Value "@ai-sdk/openai-compatible"
-    Set-OpenCodeObjectProperty -Target $llamaProvider -Name 'name' -Value "llama-server (local)"
-
-    if (-not $llamaProvider.PSObject.Properties['options'] -or $null -eq $llamaProvider.options) {
-        Set-OpenCodeObjectProperty -Target $llamaProvider -Name 'options' -Value ([pscustomobject]@{})
-    }
-    Set-OpenCodeObjectProperty -Target $llamaProvider.options -Name 'baseURL' -Value $LlmEndpoint.BaseUrl
-    Set-OpenCodeObjectProperty -Target $llamaProvider.options -Name 'apiKey' -Value "no-key"
-
-    if (-not $llamaProvider.PSObject.Properties['models'] -or $null -eq $llamaProvider.models) {
-        Set-OpenCodeObjectProperty -Target $llamaProvider -Name 'models' -Value ([pscustomobject]@{})
-    }
-    $models = $llamaProvider.models
-
-    if (-not $models.PSObject.Properties[$ModelId] -or $null -eq $models.PSObject.Properties[$ModelId].Value) {
-        Set-OpenCodeObjectProperty -Target $models -Name $ModelId -Value ([pscustomobject]@{})
-    }
-    $modelEntry = $models.PSObject.Properties[$ModelId].Value
-    Set-OpenCodeObjectProperty -Target $modelEntry -Name 'name' -Value $ModelName
-
-    if (-not $modelEntry.PSObject.Properties['limit'] -or $null -eq $modelEntry.limit) {
-        Set-OpenCodeObjectProperty -Target $modelEntry -Name 'limit' -Value ([pscustomobject]@{})
-    }
-    Set-OpenCodeObjectProperty -Target $modelEntry.limit -Name 'context' -Value $ContextLimit
-    Set-OpenCodeObjectProperty -Target $modelEntry.limit -Name 'output' -Value 32768
-
-    return $Config
-}
-
-function Sync-WindowsOpenCodeConfig {
-    param(
-        [hashtable]$LlmEndpoint,
-        [string]$ModelId,
-        [string]$ModelName,
-        [int]$ContextLimit
-    )
-
-    $_ocConfigFile = Join-Path $script:OPENCODE_CONFIG_DIR "opencode.json"
-    $_ocCompatConfigFile = Join-Path $script:OPENCODE_CONFIG_DIR "config.json"
-    $_existingConfigFile = @($_ocConfigFile, $_ocCompatConfigFile) |
-        Where-Object { Test-Path $_ } |
-        Select-Object -First 1
-
-    $_configObject = $null
-    $_configStatus = "created"
-
-    if ($_existingConfigFile) {
-        try {
-            $_configObject = Get-Content $_existingConfigFile -Raw | ConvertFrom-Json -ErrorAction Stop
-            $_configStatus = "updated"
-        } catch {
-            Write-AIWarn "OpenCode config is invalid -- regenerating from template"
-            $_configStatus = "regenerated"
-        }
-    }
-
-    $_configObject = Update-WindowsOpenCodeConfigObject `
-        -Config $_configObject `
-        -LlmEndpoint $LlmEndpoint `
-        -ModelId $ModelId `
-        -ModelName $ModelName `
-        -ContextLimit $ContextLimit
-
-    $_configJson = $_configObject | ConvertTo-Json -Depth 12
-    Write-Utf8NoBom -Path $_ocConfigFile -Content $_configJson
-    Write-Utf8NoBom -Path $_ocCompatConfigFile -Content $_configJson
-
-    return @{
-        ConfigPath = $_ocConfigFile
-        CompatConfigPath = $_ocCompatConfigFile
-        Status = $_configStatus
-    }
-}
-
+# Config helpers are sourced from installers/windows/lib/opencode-config.ps1.
 Write-AI "Setting up OpenCode AI coding assistant..."
 
 if (-not (Test-Path $script:OPENCODE_EXE)) {
@@ -240,34 +89,23 @@ if (-not (Test-Path $script:OPENCODE_EXE)) {
 
 # ── OpenCode configuration ────────────────────────────────────────────────────
 if (Test-Path $script:OPENCODE_EXE) {
-    New-Item -ItemType Directory -Path $script:OPENCODE_CONFIG_DIR -Force | Out-Null
-    $_envMap = Get-WindowsDreamEnvMap -InstallDir $installDir
-    $_llmEndpoint = Get-WindowsLocalLlmEndpoint -InstallDir $installDir -EnvMap $_envMap `
-        -GpuBackend $gpuInfo.Backend -CloudMode:$cloudMode
-    # NOTE: Windows llama-server/OpenCode integration uses the GGUF filename as the model ID.
-    $_ocModelId = Get-WindowsDreamEnvValue -EnvMap $_envMap -Keys @("GGUF_FILE") -Default $tierConfig.GgufFile
-    $_ocModelName = Get-WindowsDreamEnvValue -EnvMap $_envMap -Keys @("LLM_MODEL") -Default $tierConfig.LlmModel
-    $_ocContextRaw = Get-WindowsDreamEnvValue -EnvMap $_envMap -Keys @("MAX_CONTEXT", "CTX_SIZE") -Default "$($tierConfig.MaxContext)"
-    $_ocContext = 0
-    if (-not [int]::TryParse($_ocContextRaw, [ref]$_ocContext)) {
-        $_ocContext = [int]$tierConfig.MaxContext
-    }
-
-    $_ocSync = Sync-WindowsOpenCodeConfig `
-        -LlmEndpoint $_llmEndpoint `
-        -ModelId $_ocModelId `
-        -ModelName $_ocModelName `
-        -ContextLimit $_ocContext
+    $_ocSync = Sync-WindowsOpenCodeConfigFromEnv `
+        -InstallDir $installDir `
+        -GpuBackend $gpuInfo.Backend `
+        -CloudMode:$cloudMode `
+        -DefaultModelId $tierConfig.GgufFile `
+        -DefaultModelName $tierConfig.LlmModel `
+        -DefaultContextLimit ([int]$tierConfig.MaxContext)
 
     switch ($_ocSync.Status) {
         "created" {
-            Write-AISuccess "OpenCode configured for local llama-server (model: $_ocModelName)"
+            Write-AISuccess "OpenCode configured for local llama-server (model: $($_ocSync.ModelName))"
         }
         "updated" {
-            Write-AISuccess "OpenCode config updated for local llama-server (model: $_ocModelName)"
+            Write-AISuccess "OpenCode config updated for local llama-server (model: $($_ocSync.ModelName))"
         }
         default {
-            Write-AISuccess "OpenCode config regenerated for local llama-server (model: $_ocModelName)"
+            Write-AISuccess "OpenCode config regenerated for local llama-server (model: $($_ocSync.ModelName))"
         }
     }
 

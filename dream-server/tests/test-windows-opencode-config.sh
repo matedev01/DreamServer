@@ -10,6 +10,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEVTOOLS_PS1="$ROOT_DIR/installers/windows/phases/07-devtools.ps1"
+OPENCODE_LIB="$ROOT_DIR/installers/windows/lib/opencode-config.ps1"
+INSTALLER_PS1="$ROOT_DIR/installers/windows/install-windows.ps1"
+BOOTSTRAP_UPGRADE="$ROOT_DIR/scripts/bootstrap-upgrade.sh"
+UPDATE_SCRIPT="$ROOT_DIR/scripts/update-windows-opencode-config.ps1"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -25,9 +29,14 @@ echo "=== Windows OpenCode config tests ==="
 echo ""
 
 [[ -f "$DEVTOOLS_PS1" ]] && pass "07-devtools.ps1 exists" || fail "07-devtools.ps1 missing"
-grep -q "function Sync-WindowsOpenCodeConfig" "$DEVTOOLS_PS1" && pass "sync helper exists" || fail "sync helper missing"
-grep -q 'config.json' "$DEVTOOLS_PS1" && pass "config.json sync exists" || fail "config.json sync missing"
-grep -q 'Get-WindowsDreamEnvMap' "$DEVTOOLS_PS1" && pass "OpenCode config reads shared env helper" || fail "shared env helper missing from OpenCode config path"
+[[ -f "$OPENCODE_LIB" ]] && pass "opencode-config.ps1 exists" || fail "opencode-config.ps1 missing"
+[[ -f "$UPDATE_SCRIPT" ]] && pass "update-windows-opencode-config.ps1 exists" || fail "update-windows-opencode-config.ps1 missing"
+grep -q "function Sync-WindowsOpenCodeConfigFromEnv" "$OPENCODE_LIB" && pass "env sync helper exists" || fail "env sync helper missing"
+grep -q 'config.json' "$OPENCODE_LIB" && pass "config.json sync exists" || fail "config.json sync missing"
+grep -q 'Sync-WindowsOpenCodeConfigFromEnv' "$DEVTOOLS_PS1" && pass "phase 07 uses shared OpenCode sync helper" || fail "phase 07 missing shared OpenCode sync helper"
+grep -q 'opencode-config.ps1' "$INSTALLER_PS1" && pass "installer sources OpenCode helper library" || fail "installer missing OpenCode helper library"
+grep -q 'OpenCode config synced to active model' "$INSTALLER_PS1" && pass "installer resyncs OpenCode after launch" || fail "installer missing active-model OpenCode resync"
+grep -q 'update-windows-opencode-config.ps1' "$BOOTSTRAP_UPGRADE" && pass "bootstrap upgrade refreshes Windows OpenCode config" || fail "bootstrap upgrade missing Windows OpenCode refresh"
 grep -q 'OpenCode config updated' "$DEVTOOLS_PS1" && pass "existing config update message exists" || fail "existing config update message missing"
 
 if grep -q 'preserving existing configuration' "$DEVTOOLS_PS1"; then
