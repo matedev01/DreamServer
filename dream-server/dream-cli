@@ -701,7 +701,26 @@ cmd_status_json() {
 
     # GPU summary (optional)
     local gpu_summary_json="null"
-    if command -v nvidia-smi >/dev/null 2>&1; then
+    if [[ "${GPU_BACKEND:-}" == "apple" ]]; then
+        # Apple Silicon: integrated GPU with unified memory. Surface the same
+        # fields as `dream gpu status` so consumers of status-json can render
+        # non-null GPU info on macOS.
+        local _chip _total_mem_gb _gpu_cores
+        _chip="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo 'Apple Silicon')"
+        _total_mem_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1024 / 1024 / 1024 ))
+        if command -v jq >/dev/null 2>&1; then
+            _gpu_cores=$(system_profiler SPDisplaysDataType -json 2>/dev/null \
+                | jq -r '.SPDisplaysDataType[0].sppci_cores // "?"' 2>/dev/null)
+        else
+            _gpu_cores="?"
+        fi
+        gpu_summary_json=$(jq -n \
+            --arg backend "apple" \
+            --arg chip "$_chip" \
+            --argjson unified_memory_gb "$_total_mem_gb" \
+            --arg gpu_cores "$_gpu_cores" \
+            '{backend: $backend, chip: $chip, unified_memory_gb: $unified_memory_gb, gpu_cores: $gpu_cores}')
+    elif command -v nvidia-smi >/dev/null 2>&1; then
         # Represent each GPU line as raw strings in an array
         gpu_summary_json=$(nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu \
             --format=csv,noheader,nounits 2>/dev/null | jq -R -s 'split("\n") | map(select(length > 0))')
@@ -2571,6 +2590,21 @@ _gpu_status() {
             card=$(basename "$(dirname "$card_dir")")
             echo "  $card  $name  $(awk "BEGIN{printf \"%.1f / %.1f GB\", $vram_used/1073741824, $vram_total/1073741824}")  ${busy}%"
         done
+    elif [[ "${GPU_BACKEND:-}" == "apple" ]]; then
+        local _chip _total_mem_gb _gpu_cores
+        _chip="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo 'Apple Silicon')"
+        _total_mem_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1024 / 1024 / 1024 ))
+        if command -v jq >/dev/null 2>&1; then
+            _gpu_cores=$(system_profiler SPDisplaysDataType -json 2>/dev/null \
+                | jq -r '.SPDisplaysDataType[0].sppci_cores // "?"' 2>/dev/null)
+        else
+            _gpu_cores="?"
+        fi
+        echo ""
+        echo "  Chip:             $_chip"
+        echo "  Unified memory:   ${_total_mem_gb} GB"
+        echo "  GPU cores:        $_gpu_cores"
+        echo "  (Apple Silicon integrated GPU — unified memory shared with CPU)"
     else
         warn "GPU status unavailable: nvidia-smi not found and GPU_BACKEND is not amd"
     fi
@@ -2593,6 +2627,11 @@ _gpu_topology() {
         echo "  AMD multi-GPU topology detection not yet supported."
         echo "  Use 'dream gpu status' to see per-card utilization."
         return
+    fi
+
+    if [[ "${GPU_BACKEND:-}" == "apple" ]]; then
+        echo "  Single integrated GPU (Apple Silicon, unified memory) — no multi-GPU topology to display."
+        return 0
     fi
 
     if ! command -v nvidia-smi &>/dev/null; then
@@ -2731,6 +2770,16 @@ _gpu_validate() {
     echo -e "${BLUE}━━━ GPU Validate ━━━${NC}"
     echo ""
 
+    # Apple Silicon is a single integrated GPU with unified memory —
+    # GPU_COUNT / multi-GPU assignment / split-mode checks do not apply.
+    # Report a clean skip rather than emitting false-positive failures.
+    if [[ "${GPU_BACKEND:-}" == "apple" ]]; then
+        echo "  Apple Silicon: single integrated GPU (unified memory) — no multi-GPU validation needed."
+        echo ""
+        echo "  Result: 0 check(s) passed, 0 failed"
+        return 0
+    fi
+
     local pass=0 fail=0
 
     # Check 1: GPU_COUNT matches actual
@@ -2819,6 +2868,11 @@ _gpu_reassign() {
 
     echo -e "${BLUE}━━━ GPU Reassign ━━━${NC}"
     echo ""
+
+    if [[ "${GPU_BACKEND:-}" == "apple" ]]; then
+        warn "GPU reassignment is not applicable on Apple Silicon (single integrated GPU)."
+        return 1
+    fi
 
     if ! command -v nvidia-smi &>/dev/null; then
         warn "GPU reassign is only supported for NVIDIA. Use 'dream gpu status' for AMD."
