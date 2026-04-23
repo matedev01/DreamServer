@@ -568,6 +568,7 @@ _compose_run_with_summary() {
 
     local _compose_log
     _compose_log=$(mktemp)
+    trap 'rm -f "$_compose_log"' INT TERM
 
     local _rc=0
     docker compose --progress quiet "$@" >"$_compose_log" 2>&1 || _rc=$?
@@ -575,16 +576,23 @@ _compose_run_with_summary() {
     if (( _rc == 0 )); then
         success "${_verb} — done"
         rm -f "$_compose_log"
+        trap - INT TERM
         return 0
     fi
 
     log_error "${_verb} failed:"
-    grep -iE 'error|unhealthy|failed|dependency' "$_compose_log" \
+    local _surfaced
+    _surfaced=$(grep -iE 'error|unhealthy|failed|dependency' "$_compose_log" \
         | sed 's/^/  /' \
-        | head -20 \
-        || warn "(no error keywords matched in compose log)"
+        | head -20 || true)
+    if [[ -n "$_surfaced" ]]; then
+        printf '%s\n' "$_surfaced"
+    else
+        warn "(no error keywords matched in compose log)"
+    fi
     echo ""
     log "Full compose output: $_compose_log"
+    trap - INT TERM
     return "$_rc"
 }
 
