@@ -118,7 +118,11 @@ if ! $DRY_RUN; then
     _sync_extension_compose "${ENABLE_VOICE:-}"      whisper    "Whisper (STT)" "voice not enabled"
     _sync_extension_compose "${ENABLE_VOICE:-}"      tts        "Kokoro (TTS)"  "voice not enabled"
     _sync_extension_compose "${ENABLE_WORKFLOWS:-}"  n8n        "n8n"           "workflows not enabled"
+    # RAG = qdrant (vector store) + embeddings (TEI). Both must follow
+    # ENABLE_RAG, otherwise opting out leaves the embeddings container
+    # being pulled and started even though nothing queries it.
     _sync_extension_compose "${ENABLE_RAG:-}"        qdrant     "Qdrant"        "RAG not enabled"
+    _sync_extension_compose "${ENABLE_RAG:-}"        embeddings "Embeddings (TEI)" "RAG not enabled"
     _sync_extension_compose "${ENABLE_OPENCLAW:-}"   openclaw   "OpenClaw"      "agent framework not enabled"
     _sync_extension_compose "${ENABLE_COMFYUI:-}"    comfyui    "ComfyUI"       "image generation not enabled"
     _sync_extension_compose "${ENABLE_DREAMFORGE:-}" dreamforge "DreamForge"    "agent system not enabled"
