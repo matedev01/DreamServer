@@ -5,7 +5,7 @@ This guide covers how to iterate on `extensions/services/dashboard-api/` (the Fa
 ## TL;DR
 
 - Editing `.py` files under `extensions/services/dashboard-api/` on the host **does not** reload the running `dream-dashboard-api` container. The image bakes a copy into `/app/` at build time.
-- Run uvicorn natively on the host with `--reload` for fast iteration. The rest of the stack already supports this via `host.docker.internal`.
+- Recommended dev workflow: stop **both** the `dashboard` and `dashboard-api` Docker containers to free host ports 3001 and 3002, then run **Vite dev server** for the dashboard frontend (`npm run dev` on port 3001) plus **native uvicorn** with `--reload` for the API (port 3002). Vite's built-in `/api` proxy already points at `localhost:3002`, so the two host processes wire up automatically. The rest of the compose stack (llama-server, host-agent, etc.) stays running.
 - Only rebuild the image (or `docker cp` as a stop-gap) when you actually need to ship the change.
 
 ## The Trap
@@ -38,31 +38,67 @@ Two consequences:
 
 If you only test by editing host files and reloading the dashboard, your changes silently no-op. This has bitten contributors before; don't waste an afternoon on it.
 
-## Recommended Workflow: Native uvicorn
+## Recommended Workflow: Vite + Native uvicorn
 
-Run the API directly on the host with hot-reload. The rest of the compose stack stays running in Docker; the dashboard container reaches your host process via `host.docker.internal`, which is already wired up in `docker-compose.base.yml` (`extra_hosts: ["host.docker.internal:host-gateway"]`).
+The clean dev story is to swap the **dashboard** and **dashboard-api** Docker containers out for host-side processes that share the same ports, leaving the rest of the compose stack (llama-server, host-agent, etc.) running. Vite's built-in proxy at `extensions/services/dashboard/vite.config.js` already routes `/api` to `http://localhost:3002`:
+
+```js
+// vite.config.js (already in repo, no change needed)
+server: {
+  port: 3001,
+  proxy: { '/api': { target: 'http://localhost:3002', changeOrigin: true } }
+}
+```
+
+So the dev proxy chain becomes:
+
+```
+browser → http://localhost:3001 (Vite dev)  → /api/* → http://localhost:3002 (host uvicorn)
+```
+
+### Why both containers must be stopped
+
+`docker-compose.base.yml` binds host port 3001 to the `dashboard` (nginx) container and host port 3002 to the `dashboard-api` (uvicorn) container — both with `${BIND_ADDRESS:-127.0.0.1}` defaults. If either is running, the matching host-side process refuses to bind.
+
+Stopping only `dashboard-api` (an earlier draft of this guide's recommendation) is **wrong**: the Docker `dashboard` container's nginx config hardcodes `proxy_pass http://dashboard-api:3002` (see `extensions/services/dashboard/nginx.conf`). Without the Docker dashboard-api running, every `/api/*` request the Docker nginx proxies returns 502 Bad Gateway. The correct path is to stop **both** containers and replace them with Vite + uvicorn running on the same host ports.
+
+You can keep the rest of the stack (`llama-server`, `dream-host-agent`, `qdrant`, etc.) running. Only the two dashboard containers need to step aside.
 
 ### One-time setup
 
 ```bash
+# API venv
 cd dream-server/extensions/services/dashboard-api
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
+# Frontend deps
+cd ../dashboard
+npm install
 ```
 
 ### Each session
 
-Stop the container so the host port is free (run from the install root, where `docker-compose.base.yml` lives):
+Stop the two dashboard containers so host ports 3001 and 3002 are free:
 
 ```bash
-cd /path/to/dream-server && docker compose stop dashboard-api
+cd /path/to/dream-server
+docker compose stop dashboard dashboard-api
 ```
 
-Then run uvicorn natively. Set `DREAM_INSTALL_DIR` to the path of your installed Dream Server repo (the same path the container would see as `/dream-server`):
+Terminal 1 — Vite dev server (claims host port 3001):
+
+```bash
+cd dream-server/extensions/services/dashboard
+npm run dev
+```
+
+Terminal 2 — native uvicorn (claims host port 3002). Set `DREAM_INSTALL_DIR` to the path of your installed Dream Server repo (the same path the container sees as `/dream-server`):
 
 ```bash
 cd dream-server/extensions/services/dashboard-api
+source .venv/bin/activate
 DREAM_INSTALL_DIR=/path/to/dream-server \
 DREAM_DATA_DIR=/path/to/dream-server/data \
 DREAM_AGENT_PORT=7710 \
@@ -71,9 +107,15 @@ DREAM_AGENT_KEY="$(grep ^DREAM_AGENT_KEY /path/to/dream-server/.env | cut -d= -f
   uvicorn main:app --host 127.0.0.1 --port 3002 --reload
 ```
 
-uvicorn's `--reload` uses `watchfiles` and picks up edits to any `.py` file under the working directory.
+uvicorn's `--reload` uses `watchfiles` and picks up edits to any `.py` file under the working directory. Vite hot-reloads JSX/CSS as you edit.
 
-Other compose services that talk to the dashboard-api (notably the dashboard frontend) reach it on `http://127.0.0.1:3002` from the host or via `host.docker.internal:3002` from another container. No compose changes needed.
+Browse to **http://localhost:3001** (Vite). Backend traffic flows through Vite's proxy to your host uvicorn; the rest of the stack (host-agent on 7710, llama-server on 8080, etc.) is reached the same way it was via the Docker dashboard.
+
+When you're done, restart the production containers:
+
+```bash
+docker compose start dashboard dashboard-api
+```
 
 Mirror any other env vars your code path reads (`OLLAMA_URL`, `LLM_MODEL`, `KOKORO_URL`, etc.) from the values in `.env`. A small wrapper script that exports the relevant subset is a reasonable thing to keep locally. Note that `DASHBOARD_API_KEY` and `DREAM_AGENT_KEY` are independent secrets (since PR #979 they are no longer aliased) — if you only export one, calls in the direction that needs the other will return 401.
 
