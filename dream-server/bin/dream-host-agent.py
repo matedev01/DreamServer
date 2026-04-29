@@ -1243,9 +1243,14 @@ class AgentHandler(BaseHTTPRequestHandler):
                                     error=start_result.stderr[:500])
                     return
 
-                # Poll for running state; compose `up -d` returns 0 even for
-                # Created/Exited/Restarting containers, so a 0 exit is not
-                # conclusive proof the service actually started.
+                # By default, poll for running state: compose `up -d`
+                # returns 0 even for Created/Exited/Restarting containers,
+                # so a 0 exit is NOT conclusive proof the service actually
+                # started. Extensions whose containers intentionally exit
+                # after init (one-shot setup containers, extensions whose
+                # value is purely the setup_hook) can opt out via the
+                # manifest's `service.startup_check: false`, in which
+                # case compose's 0 exit is taken as success.
                 install_manifest = _read_manifest(ext_dir)
                 install_service_def = install_manifest.get("service", {}) if install_manifest else {}
                 if not isinstance(install_service_def, dict):
