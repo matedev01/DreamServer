@@ -101,11 +101,14 @@ cd dream-server/extensions/services/dashboard-api
 source .venv/bin/activate
 DREAM_INSTALL_DIR=/path/to/dream-server \
 DREAM_DATA_DIR=/path/to/dream-server/data \
+DREAM_AGENT_HOST=127.0.0.1 \
 DREAM_AGENT_PORT=7710 \
 DASHBOARD_API_KEY="$(grep ^DASHBOARD_API_KEY /path/to/dream-server/.env | cut -d= -f2-)" \
 DREAM_AGENT_KEY="$(grep ^DREAM_AGENT_KEY /path/to/dream-server/.env | cut -d= -f2-)" \
   uvicorn main:app --host 127.0.0.1 --port 3002 --reload
 ```
+
+`DREAM_AGENT_HOST=127.0.0.1` is required when running uvicorn natively on the host — `config.py` defaults it to `host.docker.internal`, which Docker Desktop only injects inside containers. Without this override, any host-agent-backed dashboard-api route (extensions install/start, model download, `/v1/env/update`, etc.) fails DNS resolution and returns 502.
 
 uvicorn's `--reload` uses `watchfiles` and picks up edits to any `.py` file under the working directory. Vite hot-reloads JSX/CSS as you edit.
 
