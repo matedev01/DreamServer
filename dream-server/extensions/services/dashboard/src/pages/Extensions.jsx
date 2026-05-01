@@ -6,34 +6,13 @@ import {
 import { useState, useEffect, useRef } from 'react'
 import { DependencyBadges, DependencyConfirmDialog, DisableDependentWarning } from '../components/DependencyBadges'
 import { TemplatePicker } from '../components/TemplatePicker'
+import { getTemplateStatus } from '../lib/templates'
 
-// Services defined in docker-compose.base.yml — always running, not togglable via templates
-const BASE_COMPOSE_SERVICES = new Set(['llama-server', 'open-webui', 'dashboard', 'dashboard-api'])
+// Re-export so existing importers of getTemplateStatus from this module keep working.
+export { getTemplateStatus }
 
 // API/backend services with no user-facing web UI — show badge instead of port link.
 const HEADLESS_EXTENSIONS = new Set(['embeddings', 'tts', 'whisper', 'privacy-shield'])
-
-// Compute template status from catalog extensions data.
-// Returns one of: 'available', 'in_progress', 'applied', 'has_errors'
-// Precedence: has_errors > in_progress > applied > available
-export function getTemplateStatus(template, extensions) {
-  const services = template.services || []
-  const serviceStatus = {}
-  for (const svcId of services) {
-    if (BASE_COMPOSE_SERVICES.has(svcId)) {
-      serviceStatus[svcId] = 'enabled'
-      continue
-    }
-    const ext = extensions.find(e => e.id === svcId)
-    serviceStatus[svcId] = ext ? ext.status : undefined
-  }
-  const statuses = Object.values(serviceStatus)
-  if (statuses.some(s => s === 'error')) return 'has_errors'
-  if (statuses.some(s => s === 'installing' || s === 'setting_up')) return 'in_progress'
-  const allEnabled = statuses.every(s => s === 'enabled')
-  if (allEnabled) return 'applied'
-  return 'available'
-}
 
 // Auth: nginx injects "Authorization: Bearer ${DASHBOARD_API_KEY}" via
 // proxy_set_header for all /api/ requests (see nginx.conf).  All fetches
@@ -79,6 +58,7 @@ const friendlyError = (detail) => {
 const STATUS_STYLES = {
   enabled:       'bg-green-500/20 text-green-400',
   stopped:       'bg-red-500/20 text-red-400',
+  unhealthy:     'bg-amber-500/20 text-amber-400',
   disabled:      'bg-theme-border text-theme-text-muted',
   not_installed: 'border border-theme-border text-theme-text-muted',
   incompatible:  'bg-orange-500/20 text-orange-400',
@@ -90,7 +70,8 @@ const STATUS_STYLES = {
 const STATUS_DESCRIPTIONS = {
   enabled:       'Service is running and healthy',
   disabled:      'Installed but turned off \u2014 won\u2019t start on restart',
-  stopped:       'Enabled but container is not running or unhealthy',
+  stopped:       'Enabled but container is not running',
+  unhealthy:     'Container is running but health check is failing \u2014 check logs',
   not_installed: 'Available to install from the extension library',
   incompatible:  'Requires a GPU backend not available on this system',
   installing:    'Being downloaded and set up',
@@ -303,8 +284,8 @@ export default function Extensions() {
       .filter(Boolean)
   )]
 
-  const STATUS_FILTERS = ['all', 'enabled', 'stopped', 'disabled', 'installing', 'setting_up', 'error', 'not_installed', 'incompatible']
-  const STATUS_LABELS = { all: 'All', enabled: 'Enabled', stopped: 'Stopped', disabled: 'Disabled', installing: 'Installing', setting_up: 'Setting Up', error: 'Error', not_installed: 'Not Installed', incompatible: 'Incompatible' }
+  const STATUS_FILTERS = ['all', 'enabled', 'stopped', 'unhealthy', 'disabled', 'installing', 'setting_up', 'error', 'not_installed', 'incompatible']
+  const STATUS_LABELS = { all: 'All', enabled: 'Enabled', stopped: 'Stopped', unhealthy: 'Unhealthy', disabled: 'Disabled', installing: 'Installing', setting_up: 'Setting Up', error: 'Error', not_installed: 'Not Installed', incompatible: 'Incompatible' }
 
   // Filter extensions
   const query = search.toLowerCase()
@@ -357,6 +338,7 @@ export default function Extensions() {
           <SummaryItem label="Total" value={summary.total || extensions.length} color="bg-theme-text-muted" />
           <SummaryItem label="Installed" value={summary.installed ?? 0} color="bg-green-500" />
           <SummaryItem label="Stopped" value={summary.stopped ?? 0} color="bg-red-500" />
+          <SummaryItem label="Unhealthy" value={summary.unhealthy ?? 0} color="bg-amber-500" />
           <SummaryItem label="Available" value={summary.not_installed ?? 0} color="bg-theme-accent" />
           <SummaryItem label="Installing" value={summary.installing ?? 0} color="bg-blue-500" />
           <SummaryItem label="Error" value={summary.error ?? 0} color="bg-red-500" />
@@ -601,7 +583,8 @@ function ExtensionCard({ ext, gpuBackend, agentAvailable, onDetails, onConsole, 
   const isUserExt = ext.source === 'user'
   const isError = status === 'error'
   const isStopped = status === 'stopped'
-  const isToggleable = isUserExt && (status === 'enabled' || status === 'disabled' || status === 'error' || status === 'stopped')
+  const isUnhealthy = status === 'unhealthy'
+  const isToggleable = isUserExt && (status === 'enabled' || status === 'disabled' || status === 'error' || status === 'stopped' || status === 'unhealthy')
   const showRemove = isUserExt && (status === 'disabled' || isError)
   const showInstall = status === 'not_installed' && ext.installable
 
@@ -616,6 +599,7 @@ function ExtensionCard({ ext, gpuBackend, agentAvailable, onDetails, onConsole, 
             <div className={`p-1.5 rounded-lg ${
               status === 'enabled' ? 'bg-green-500/10' :
               status === 'stopped' ? 'bg-red-500/10' :
+              status === 'unhealthy' ? 'bg-amber-500/10' :
               status === 'incompatible' ? 'bg-orange-500/10' :
               (status === 'installing' || status === 'setting_up') ? 'bg-blue-500/10' :
               status === 'error' ? 'bg-red-500/10' :
@@ -624,6 +608,7 @@ function ExtensionCard({ ext, gpuBackend, agentAvailable, onDetails, onConsole, 
               <Icon size={16} className={
                 status === 'enabled' ? 'text-green-400' :
                 status === 'stopped' ? 'text-red-400' :
+                status === 'unhealthy' ? 'text-amber-400' :
                 status === 'incompatible' ? 'text-orange-400' :
                 (status === 'installing' || status === 'setting_up') ? 'text-blue-400' :
                 status === 'error' ? 'text-red-400' :
@@ -656,6 +641,7 @@ function ExtensionCard({ ext, gpuBackend, agentAvailable, onDetails, onConsole, 
                 className={`relative inline-flex h-[18px] w-[32px] shrink-0 rounded-full transition-colors disabled:opacity-50 ${
                   status === 'error' ? 'bg-red-500' :
                   status === 'stopped' ? 'bg-amber-500' :
+                  status === 'unhealthy' ? 'bg-amber-500' :
                   status === 'enabled' ? 'bg-green-500' : 'bg-theme-border'
                 }`}
               >
@@ -708,6 +694,16 @@ function ExtensionCard({ ext, gpuBackend, agentAvailable, onDetails, onConsole, 
               className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] rounded-lg bg-green-500/15 text-green-400 hover:bg-green-500/25 transition-colors disabled:opacity-50"
             >
               {isMutating ? <Loader2 size={12} className="animate-spin" /> : 'Start'}
+            </button>
+          )}
+          {isUserExt && isUnhealthy && (
+            <button
+              onClick={onConsole}
+              disabled={agentOffline}
+              title={agentOffline ? 'Host agent is offline' : 'View container logs'}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 transition-colors disabled:opacity-50"
+            >
+              <Terminal size={12} /> Check Logs
             </button>
           )}
           {isError && (
@@ -780,7 +776,7 @@ function ExtensionCard({ ext, gpuBackend, agentAvailable, onDetails, onConsole, 
               className={`flex items-center gap-1.5 px-2 py-1.5 text-[10px] rounded-lg transition-colors ${
                 agentOffline ? 'text-theme-text-muted/40 cursor-not-allowed' :
                 isError ? 'text-red-400 hover:text-red-300 hover:bg-red-500/10' :
-                (status === 'installing' || isStopped) ? 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/10' :
+                (status === 'installing' || isStopped || isUnhealthy) ? 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/10' :
                 'text-theme-text-secondary hover:text-theme-text hover:bg-theme-surface-hover/40'
               }`}
               title={agentOffline ? 'Agent offline' : 'View logs'}
