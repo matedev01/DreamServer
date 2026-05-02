@@ -61,9 +61,19 @@ fi
 log() { echo -e "${CYAN}[dream]${NC} $1" >&2; }
 success() { echo -e "${GREEN}✓${NC} $1"; }
 warn() { echo -e "${YELLOW}⚠${NC} $1" >&2; }
-error() { echo -e "${RED}✗${NC} $1"; exit 1; }
-log_warn() { echo -e "${YELLOW}⚠${NC} $1"; }
+error() { echo -e "${RED}✗${NC} $1" >&2; exit 1; }
 log_error() { echo -e "${RED}✗${NC} $1" >&2; }
+
+# Map cmd_list status string to a colour. Returns an empty string for unknown
+# statuses so future state names don't break formatting.
+_status_color() {
+    case "$1" in
+        enabled|always-on) echo "$GREEN" ;;
+        disabled|stopped)  echo "$YELLOW" ;;
+        unhealthy|error)   echo "$RED" ;;
+        *)                 echo "" ;;
+    esac
+}
 
 # Print a separator of repeated characters filling the given width.
 # Usage: hr <width> [<char=─>]
@@ -919,7 +929,7 @@ cmd_dry_run() {
     load_env
 
     echo -e "${BLUE}━━━ Dream Update — Dry Run ━━━${NC}"
-    echo -e "${CYAN}Preview only. No changes will be applied.${NC}"
+    echo "Preview only. No changes will be applied."
     echo ""
 
     # ── version ──────────────────────────────────────────────────────────────
@@ -969,7 +979,7 @@ cmd_dry_run() {
         fi
     fi
 
-    echo -e "${CYAN}Version:${NC}"
+    echo -e "${BLUE}━━━ Version ━━━${NC}"
     echo "  Installed : v${cur_ver}"
     if [[ -n "$latest_ver" ]]; then
         echo "  Available : v${latest_ver}"
@@ -985,7 +995,7 @@ cmd_dry_run() {
     echo ""
 
     # ── image tags ────────────────────────────────────────────────────────────
-    echo -e "${CYAN}Configured image tags (would be pulled):${NC}"
+    echo -e "${BLUE}━━━ Image tags (would be pulled) ━━━${NC}"
     local flags_str
     flags_str=$(get_compose_flags)
     local -a flags
@@ -1016,14 +1026,14 @@ cmd_dry_run() {
     [[ "$images_shown" == "false" ]] && echo "  (could not resolve compose config)"
 
     echo ""
-    echo -e "${CYAN}Currently running image digests:${NC}"
+    echo -e "${BLUE}━━━ Running image digests ━━━${NC}"
     docker compose "${flags[@]}" images 2>/dev/null \
         | awk 'NR>1 {printf "  %-30s %s\n", $1, $4}' \
         || echo "  (services not running)"
     echo ""
 
     # ── model / GGUF ─────────────────────────────────────────────────────────
-    echo -e "${CYAN}Model configuration (.env):${NC}"
+    echo -e "${BLUE}━━━ Model configuration (.env) ━━━${NC}"
     local -a model_keys=(TIER LLM_MODEL GGUF_FILE CTX_SIZE GPU_BACKEND N_GPU_LAYERS)
     local key
     for key in "${model_keys[@]}"; do
@@ -1034,7 +1044,7 @@ cmd_dry_run() {
     echo ""
 
     # ── .env keys the update path reads/writes ────────────────────────────────
-    echo -e "${CYAN}.env keys the update path will read or write:${NC}"
+    echo -e "${BLUE}━━━ .env keys (read/write) ━━━${NC}"
     local -a update_keys=(DREAM_VERSION TIER LLM_MODEL GGUF_FILE CTX_SIZE GPU_BACKEND N_GPU_LAYERS)
 
     if [[ -n "$api_json" ]] && echo "$api_json" | jq -e '.env_keys' >/dev/null 2>&1; then
@@ -1050,9 +1060,9 @@ cmd_dry_run() {
     echo ""
 
     # ── summary ───────────────────────────────────────────────────────────────
-    echo -e "${CYAN}To apply this update:${NC}  dream update"
+    echo "To apply this update:  dream update"
     echo ""
-    echo -e "${YELLOW}Dry run complete. Nothing was changed.${NC}"
+    warn "Dry run complete. Nothing was changed."
 }
 
 cmd_update() {
@@ -1139,7 +1149,7 @@ cmd_update() {
         container=$(sr_container "$service" 2>/dev/null || echo "")
         if [[ -n "$container" ]]; then
             if ! docker ps --filter "name=$container" --filter "status=running" --format "{{.Names}}" | grep -q "^$container$"; then
-                log_warn "Service $service ($container) is not running"
+                warn "Service $service ($container) is not running"
                 ((failed_services++))
             fi
         fi
@@ -1799,7 +1809,12 @@ cmd_list() {
         else
             status="disabled"
         fi
-        printf "%-20s %-12s %-10s\n" "$sid" "$cat" "$status"
+        # Colour vars are blanked to "" off-TTY (lines 42-56), so no extra
+        # `[[ -t 1 ]]` guard is needed; padding stays consistent because ANSI
+        # escapes have zero display width.
+        local color
+        color=$(_status_color "$status")
+        printf "%-20s %-12s %s%-10s%s\n" "$sid" "$cat" "$color" "$status" "$NC"
     done
 }
 
@@ -2081,14 +2096,14 @@ META
             echo ""
 
             # Compare metadata
-            echo -e "${CYAN}━━━ Metadata ━━━${NC}"
+            echo -e "${BLUE}━━━ Metadata ━━━${NC}"
             if [[ -f "$dir1/meta.txt" ]] && [[ -f "$dir2/meta.txt" ]]; then
                 diff -u "$dir1/meta.txt" "$dir2/meta.txt" | tail -n +4 | sed "s/^-/$(printf "${RED}-${NC}")/" | sed "s/^+/$(printf "${GREEN}+${NC}")/" || true
             fi
             echo ""
 
             # Compare extensions
-            echo -e "${CYAN}━━━ Service State ━━━${NC}"
+            echo -e "${BLUE}━━━ Service State ━━━${NC}"
             if [[ -f "$dir1/extensions.list" ]] && [[ -f "$dir2/extensions.list" ]]; then
                 # Parse both files into associative arrays
                 declare -A ext1 ext2
@@ -2129,7 +2144,7 @@ META
             echo ""
 
             # Compare environment variables
-            echo -e "${CYAN}━━━ Environment Variables ━━━${NC}"
+            echo -e "${BLUE}━━━ Environment Variables ━━━${NC}"
             if [[ -f "$dir1/env" ]] && [[ -f "$dir2/env" ]]; then
                 # Parse both env files
                 declare -A env1 env2
@@ -2297,7 +2312,7 @@ cmd_model() {
         current)
             local model=$(grep "^LLM_MODEL=" .env 2>/dev/null | cut -d= -f2)
             local tier=$(grep "^TIER=" .env 2>/dev/null | cut -d= -f2)
-            echo "Current model: ${model:-<not set>}"
+            echo -e "Current model: ${GREEN}${model:-<not set>}${NC}"
             [[ -n "$tier" ]] && echo "Current tier: $tier"
             return 0
             ;;
@@ -2468,7 +2483,7 @@ cmd_rollback() {
 
     log "Rolling back to pre-update state (backup: $backup_id)..."
     echo ""
-    log_warn "This will restore configuration from before the last update."
+    warn "This will restore configuration from before the last update."
     read -p "Continue with rollback? [y/N] " -n 1 -r
     echo ""
 
