@@ -1034,6 +1034,174 @@ class TestHandleModelDownloadCancel:
         assert proc.killed is True
 
 
+class TestNarrowInstallPullFlags:
+    """Filter flags used by the install pull step.
+
+    Audit follow-up on PR #1057: narrowing must drop -f entries
+    pointing at OTHER extensions, but keep base/GPU overlay and the
+    target extension's own fragments.
+    """
+
+    def _ext_dirs(self, tmp_path):
+        builtins = tmp_path / "extensions" / "services"
+        users = tmp_path / "user-extensions"
+        builtins.mkdir(parents=True)
+        users.mkdir(parents=True)
+        return builtins, users
+
+    def test_drops_other_extension_compose(self, tmp_path, monkeypatch):
+        builtins, users = self._ext_dirs(tmp_path)
+        target_dir = builtins / "perplexica"
+        other_dir = builtins / "searxng"
+        target_dir.mkdir()
+        other_dir.mkdir()
+        target_compose = target_dir / "compose.yaml"
+        other_compose = other_dir / "compose.yaml"
+        target_compose.write_text("services: {}\n")
+        other_compose.write_text("services: {}\n")
+
+        monkeypatch.setattr(_mod, "INSTALL_DIR", tmp_path)
+        monkeypatch.setattr(_mod, "EXTENSIONS_DIR", builtins)
+        monkeypatch.setattr(_mod, "USER_EXTENSIONS_DIR", users)
+
+        flags = [
+            "-f", str(tmp_path / "docker-compose.base.yml"),
+            "-f", str(tmp_path / "docker-compose.nvidia.yml"),
+            "-f", str(target_compose),
+            "-f", str(other_compose),
+        ]
+        narrowed = _mod._narrow_install_pull_flags(flags, "perplexica")
+
+        assert "-f" in narrowed
+        assert str(other_compose) not in narrowed
+        assert str(target_compose) in narrowed
+
+    def test_keeps_base_and_gpu_overlay(self, tmp_path, monkeypatch):
+        builtins, users = self._ext_dirs(tmp_path)
+        target_dir = builtins / "perplexica"
+        target_dir.mkdir()
+        target_compose = target_dir / "compose.yaml"
+        target_compose.write_text("services: {}\n")
+
+        monkeypatch.setattr(_mod, "INSTALL_DIR", tmp_path)
+        monkeypatch.setattr(_mod, "EXTENSIONS_DIR", builtins)
+        monkeypatch.setattr(_mod, "USER_EXTENSIONS_DIR", users)
+
+        base = str(tmp_path / "docker-compose.base.yml")
+        gpu = str(tmp_path / "docker-compose.nvidia.yml")
+        flags = ["-f", base, "-f", gpu, "-f", str(target_compose)]
+        narrowed = _mod._narrow_install_pull_flags(flags, "perplexica")
+
+        assert base in narrowed
+        assert gpu in narrowed
+        assert str(target_compose) in narrowed
+
+    def test_user_extension_target_is_kept(self, tmp_path, monkeypatch):
+        builtins, users = self._ext_dirs(tmp_path)
+        target_dir = users / "my-ext"
+        other_dir = builtins / "searxng"
+        target_dir.mkdir()
+        other_dir.mkdir()
+        target_compose = target_dir / "compose.yaml"
+        other_compose = other_dir / "compose.yaml"
+        target_compose.write_text("services: {}\n")
+        other_compose.write_text("services: {}\n")
+
+        monkeypatch.setattr(_mod, "INSTALL_DIR", tmp_path)
+        monkeypatch.setattr(_mod, "EXTENSIONS_DIR", builtins)
+        monkeypatch.setattr(_mod, "USER_EXTENSIONS_DIR", users)
+
+        flags = ["-f", str(target_compose), "-f", str(other_compose)]
+        narrowed = _mod._narrow_install_pull_flags(flags, "my-ext")
+
+        assert str(target_compose) in narrowed
+        assert str(other_compose) not in narrowed
+
+
+class TestNarrowedComposeSetResolves:
+    """Validate that the narrowed compose set parses and contains the
+    target service. Audit follow-up on PR #1057.
+    """
+
+    def test_returns_false_when_config_exits_nonzero(self, monkeypatch):
+        recorded = []
+
+        def fake_run(cmd, **kwargs):
+            recorded.append(cmd)
+            return _SubprocessResult(returncode=1, stdout="", stderr="depends on undefined service")
+
+        monkeypatch.setattr(_mod.subprocess, "run", fake_run)
+        ok = _mod._narrowed_compose_set_resolves(
+            ["-f", "/tmp/base.yml"], "perplexica", "/tmp", 60,
+        )
+        assert ok is False
+        assert recorded[0][:2] == ["docker", "compose"]
+        assert "config" in recorded[0] and "--services" in recorded[0]
+
+    def test_returns_false_when_target_service_missing_from_output(self, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            return _SubprocessResult(returncode=0, stdout="searxng\nllama-server\n", stderr="")
+
+        monkeypatch.setattr(_mod.subprocess, "run", fake_run)
+        ok = _mod._narrowed_compose_set_resolves([], "perplexica", "/tmp", 60)
+        assert ok is False
+
+    def test_returns_true_when_target_service_listed(self, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            return _SubprocessResult(returncode=0, stdout="perplexica\nsearxng\n", stderr="")
+
+        monkeypatch.setattr(_mod.subprocess, "run", fake_run)
+        ok = _mod._narrowed_compose_set_resolves([], "perplexica", "/tmp", 60)
+        assert ok is True
+
+    def test_returns_false_on_subprocess_error(self, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            raise OSError("docker not found")
+
+        monkeypatch.setattr(_mod.subprocess, "run", fake_run)
+        ok = _mod._narrowed_compose_set_resolves([], "perplexica", "/tmp", 60)
+        assert ok is False
+
+
+class TestInstallPullFallsBackOnUnresolvedNarrow:
+    """Source-level wire-up checks for the install pull fallback.
+
+    These tests assert only that `_handle_install` *references* the
+    helpers and contains the fallback assignment token; behavioural
+    correctness of the narrow filter and the validator is covered by
+    `TestNarrowInstallPullFlags` and `TestNarrowedComposeSetResolves`
+    above. The token-presence pattern matches the established
+    `TestInstallStartCommandNoDeps` convention in this file.
+    """
+
+    def test_install_references_narrow_helpers(self):
+        import inspect
+        src = inspect.getsource(_mod.AgentHandler._handle_install)
+        assert "_narrowed_compose_set_resolves" in src, (
+            "_handle_install source must reference _narrowed_compose_set_resolves"
+        )
+        assert "_narrow_install_pull_flags" in src, (
+            "_handle_install source must reference _narrow_install_pull_flags"
+        )
+
+    def test_install_source_contains_full_flags_fallback_token(self):
+        import inspect
+        src = inspect.getsource(_mod.AgentHandler._handle_install)
+        # Token-only check: confirms a `pull_flags = flags` assignment
+        # exists somewhere in the handler. Does not verify control flow.
+        assert "pull_flags = flags" in src, (
+            "_handle_install source must contain a `pull_flags = flags` "
+            "assignment (the fallback token)"
+        )
+
+
+class _SubprocessResult:
+    """Minimal stand-in for subprocess.CompletedProcess."""
+
+    def __init__(self, returncode: int, stdout: str, stderr: str):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
 # --- _precreate_data_dirs + install flow (PR 2A regressions) ---
 #
 # Defect 1/2: _run_install and _precreate_data_dirs must use _find_ext_dir()
