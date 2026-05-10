@@ -890,9 +890,32 @@ else
 
     # ── Start Docker services ──
     chapter "STARTING SERVICES"
-    ai "Running: docker compose ${COMPOSE_FLAGS[*]} up -d"
+
+    # ── Rebuild local-built images ─────────────────────────────────────
+    # Mirrors phases/11-services.sh on Linux: local Dockerfiles (dashboard,
+    # dashboard-api, ape, token-spy, privacy-shield, and Apple-Silicon
+    # DreamForge builds) can drift from the baked images, so we always
+    # rebuild without cache before `up -d`.
+    # ComfyUI has no Apple-Silicon variant (only amd/nvidia/multigpu); the
+    # llama-server runs natively on macOS via Metal — neither is built here.
+    ai "Rebuilding local-built images (no-cache)..."
+    _macos_build_services=(dashboard dashboard-api ape token-spy privacy-shield)
+    _dreamforge_pull_policy="$(grep -m1 '^DREAMFORGE_PULL_POLICY=' "${INSTALL_DIR}/.env" 2>/dev/null | cut -d= -f2- | tr -d '"'\''[:space:]' || true)"
+    [[ "$_dreamforge_pull_policy" == "build" ]] && _macos_build_services+=(dreamforge)
+    declare -a _macos_build_pids _macos_build_names
+    for _svc in "${_macos_build_services[@]}"; do
+        docker compose "${COMPOSE_FLAGS[@]}" build --no-cache "$_svc" >> "$DS_LOG_FILE" 2>&1 &
+        _macos_build_pids+=($!)
+        _macos_build_names+=("$_svc")
+    done
+    for _i in "${!_macos_build_pids[@]}"; do
+        wait "${_macos_build_pids[$_i]}" || ai_warn "Build failed for ${_macos_build_names[$_i]} (see $DS_LOG_FILE)"
+    done
+    ai_ok "Local images rebuilt"
+
+    ai "Running: docker compose ${COMPOSE_FLAGS[*]} up -d --no-build"
     set +o pipefail  # pipefail would abort on compose exit before PIPESTATUS is read; capture it first
-    docker compose "${COMPOSE_FLAGS[@]}" up -d 2>&1 | while IFS= read -r line; do
+    docker compose "${COMPOSE_FLAGS[@]}" up -d --no-build 2>&1 | while IFS= read -r line; do
         echo "  $line"
     done
     compose_exit="${PIPESTATUS[0]}"
