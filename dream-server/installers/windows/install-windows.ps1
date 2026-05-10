@@ -607,7 +607,7 @@ if ($dryRun) {
             exit 1
         }
 
-        Write-AI "Running: docker compose $($composeFlags -join ' ') up -d --no-build"
+        Write-AI "Running: docker compose $($composeFlags -join ' ') up -d --remove-orphans --no-build"
         # PS 5.1 treats ANY stderr output from native commands as NativeCommandError.
         # Silence stderr-as-error so $LASTEXITCODE reflects the real compose exit code.
         # Write output to log file to avoid ForEach-Object pipeline hang on failure.
@@ -638,7 +638,7 @@ if ($dryRun) {
         Write-AISuccess "Local images rebuilt"
 
         Write-AI "Starting services... this may take several minutes."
-        & docker compose @composeFlags up -d --no-build *> $_composeLog
+        & docker compose @composeFlags up -d --remove-orphans --no-build *> $_composeLog
         $composeExit = $LASTEXITCODE
         $ErrorActionPreference = $prevEAP
         # Show tail of compose output for immediate feedback

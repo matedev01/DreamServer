@@ -923,9 +923,9 @@ else
     done
     ai_ok "Local images rebuilt"
 
-    ai "Running: docker compose ${COMPOSE_FLAGS[*]} up -d --no-build"
+    ai "Running: docker compose ${COMPOSE_FLAGS[*]} up -d --remove-orphans --no-build"
     set +o pipefail  # pipefail would abort on compose exit before PIPESTATUS is read; capture it first
-    docker compose "${COMPOSE_FLAGS[@]}" up -d --no-build 2>&1 | while IFS= read -r line; do
+    docker compose "${COMPOSE_FLAGS[@]}" up -d --remove-orphans --no-build 2>&1 | while IFS= read -r line; do
         echo "  $line"
     done
     compose_exit="${PIPESTATUS[0]}"
