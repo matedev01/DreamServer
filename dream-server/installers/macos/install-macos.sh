@@ -208,6 +208,16 @@ if $INSTALL_FS_FATAL; then
 fi
 ai_ok "Filesystem supports POSIX permissions"
 
+# Networked-filesystem advisory (warn-only).
+# chmod 600 still applies on NFS/SMB/AFP, but the actual access control is
+# enforced server-side by the share's ACL — other clients with access to the
+# share may read .env regardless of local permissions.
+if [[ "${INSTALL_FS_NETWORKED:-false}" == "true" ]]; then
+    ai_warn "INSTALL_DIR ($INSTALL_DIR) is on a networked filesystem ($INSTALL_FS_TYPE)."
+    ai_warn ".env permissions (chmod 600) are advisory — actual access control is governed by the share's ACL on the server."
+    ai_warn "If this share is exposed to other clients, sensitive credentials may be readable from those hosts."
+fi
+
 # Docker Desktop file-sharing allowlist check
 # Bind-mounts of paths outside the allowlist fail with cryptic OCI errors at
 # `docker compose up`. Probe with a throwaway container so we surface a clear

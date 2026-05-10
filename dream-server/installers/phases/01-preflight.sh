@@ -131,6 +131,17 @@ Pick a path on a POSIX-native filesystem (ext4, btrfs, xfs, zfs) and
 re-run, e.g.:  INSTALL_DIR=\"\$HOME/dream-server\" $0"
             ;;
     esac
+
+    # Networked filesystems honour chmod 600 locally, but the real access
+    # control lives in the share's server-side ACL. Warn only — installs
+    # to network-mounted homes are common and not always insecure.
+    case "$fs_type" in
+        nfs|nfs4|cifs|fuse.smbnetfs|fuse.glusterfs|ocfs2)
+            warn "INSTALL_DIR ($INSTALL_DIR) is on a networked filesystem ($fs_type)."
+            warn ".env permissions (chmod 600) are advisory — actual access control is governed by the share's ACL on the server."
+            warn "If this share is exposed to other clients, sensitive credentials may be readable from those hosts."
+            ;;
+    esac
     log "INSTALL_DIR filesystem: ${INSTALL_FS_TYPE}"
 }
 
