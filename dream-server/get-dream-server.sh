@@ -11,8 +11,10 @@ set -euo pipefail
 # same terminal will land here with a deleted working directory — `git
 # clone` then fails with `fatal: Unable to read current working directory`
 # and the user sees a misleading "check your internet connection" message.
-if ! cd "${HOME:-/tmp}" 2>/dev/null; then
-    cd /tmp 2>/dev/null || {
+DREAM_BOOTSTRAP_ROOT="${HOME:-/tmp}"
+if ! cd "$DREAM_BOOTSTRAP_ROOT" 2>/dev/null; then
+    DREAM_BOOTSTRAP_ROOT="/tmp"
+    cd "$DREAM_BOOTSTRAP_ROOT" 2>/dev/null || {
         echo "[error] Cannot find a usable working directory (\$HOME and /tmp both inaccessible)." >&2
         exit 1
     }
@@ -28,7 +30,7 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 REPO_URL="https://github.com/Light-Heart-Labs/DreamServer.git"
-INSTALL_DIR="$HOME/dream-server"
+INSTALL_DIR="$DREAM_BOOTSTRAP_ROOT/dream-server"
 
 log()     { echo -e "${CYAN}[dream]${NC} $1"; }
 success() { echo -e "${GREEN}[  ok ]${NC} $1"; }
@@ -215,7 +217,7 @@ echo "$_clone_err" | tail -1
 cd "$TEMP_DIR/repo"
 git sparse-checkout set dream-server 2>/dev/null || {
     # Fallback: full clone if sparse checkout fails
-    cd "${HOME:-/tmp}"
+    cd "$DREAM_BOOTSTRAP_ROOT"
     rm -rf "$TEMP_DIR/repo"
     git clone --depth 1 "$REPO_URL" "$TEMP_DIR/repo" 2>&1 | tail -1 || \
         error "Failed to clone repository (fallback full clone also failed)."
